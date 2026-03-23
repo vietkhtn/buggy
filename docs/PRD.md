@@ -81,11 +81,11 @@ QA teams working on mobile and web applications lack a unified, lightweight tool
 | ID | Story | Acceptance Criteria |
 |----|-------|---------------------|
 | M1 | As a QA engineer, I want to upload JUnit XML files so that I can track automated test results | - Drag-drop or API upload<br>- Parse pass/fail/skip/error counts<br>- Extract test names, durations, failure messages<br>- Support nested test suites |
-| M2 | As a QA engineer, I want to create manual test cases so that I can document what needs testing | - Create test case with title, steps, expected results<br>- Organize by folder/tag/module<br>- Mark as draft/active/deprecated |
-| M3 | As a QA engineer, I want to execute manual tests with step-by-step tracking so that I can record exactly what passed or failed | - Execute test run with pass/fail/blocked per step<br>- Add notes/attachments to steps<br>- Calculate overall pass rate |
+| M2 | As a QA engineer, I want to create manual test cases so that I can document what needs testing | - Create test case with title, description, and priority<br>- Assign optional Jira reference and auto-generated Test Case ID<br>- Organize by folder/tag/module<br>- Manage suites (add/remove cases, delete suites without deleting cases)<br>- Mark as draft/active/deprecated |
+| M3 | As a QA engineer, I want to execute manual tests with clear tracking so that I can record exactly what passed or failed | - Execute test run with pass/fail/blocked per case<br>- Add run-level notes/attachments<br>- Calculate overall pass rate |
 | M4 | As a QA lead, I want to see a dashboard with pass/fail/skip counts so that I can quickly assess test health | - Total tests, passed, failed, skipped<br>- Pass rate percentage<br>- Filter by date range, tag, module |
 | M5 | As a stakeholder, I want to view a human-readable test summary so that I can understand release quality | - Executive summary with key metrics<br>- No technical jargon<br>- Visual pass/fail indicators |
-| M6 | As a user, I want to sign in with email/password or OAuth so that my data is secure | - Email/password registration and login<br>- Google OAuth<br>- GitHub OAuth |
+| M6 | As a user, I want to sign in with email/password so that my data is secure | - Email/password registration and login<br>- Password reset via email link<br>- Session management with configurable timeout |
 
 ### Should Have (MVP - Week 2-3)
 
@@ -93,6 +93,7 @@ QA teams working on mobile and web applications lack a unified, lightweight tool
 |----|-------|---------------------|
 | S1 | As a QA engineer, I want to see flaky test detection so that I can prioritize test fixes | - Flag tests that pass/fail inconsistently across last 5 runs<br>- Show flakiness score (fail rate over last 5 runs)<br>- Filter dashboard by flaky tests |
 | S2 | As a QA engineer, I want to categorize failures (UI, API, timeout, assertion) so that I can identify patterns | - Auto-categorize from error messages where possible<br>- Manual override category<br>- Report by failure category |
+| S7 | As a QA lead, I want guided metric logging so that team members know exactly what to enter | - Each metric field includes clarifying questions and inline examples<br>- Form validation ensures responses match expected formats |
 | S3 | As a QA lead, I want to track test coverage by feature/module so that I can see testing gaps | - Tag tests with feature/module<br>- Coverage heatmap view<br>- Identify modules with low/no coverage |
 | S4 | As a QA engineer, I want to compare test runs over time so that I can see trends | - Select 2+ runs to compare<br>- Show newly failing, newly passing, consistently failing<br>- Trend graph over time |
 | S5 | As a user, I want to export reports as PDF so that I can share with stakeholders offline | - Generate PDF with selected metrics<br>- Include charts and summary<br>- Neutral default theme |
@@ -156,20 +157,26 @@ Content-Type: application/json
 
 **Test Case Structure**
 - Title (required, 200 char max)
+- Auto-generated Test Case ID (prefix configurable in Project Settings; defaults to project initials)
+- Optional Jira reference field (validated for Jira key format)
 - Description (optional, markdown supported)
 - Preconditions (optional)
-- Steps (ordered list, each with action + expected result)
 - Tags (multiple, for filtering)
 - Module/Feature (single select from project taxonomy)
 - Priority (Critical, High, Medium, Low)
 - Status (Draft, Active, Deprecated)
 
+**Test Suite Management**
+- Create suites and add/remove test cases at any time
+- Removing a test suite never deletes underlying test cases
+- Bulk actions available for moving cases between suites
+- Audit log records suite membership changes
+
 **Test Execution**
 - Select test cases for a run
-- Execute step-by-step with pass/fail/blocked per step
-- Add notes at step or run level
-- Attach screenshots/files (max 10MB each)
-- Auto-calculate run status based on step outcomes
+- Record pass/fail/blocked at the case level (no per-step UI)
+- Add run-level notes and attachments (max 10MB each)
+- Auto-calculate run status based on aggregated case outcomes
 
 ### Reporting & Metrics
 
@@ -187,6 +194,12 @@ Content-Type: application/json
 | Coverage by module | Tests per feature/module with pass rates |
 | Trend comparison | Delta vs. previous run |
 | Historical chart | Pass rate over last N runs |
+
+**Guided Metric Logging**
+- When adding metrics to a report template, each field surfaces clarifying prompts (e.g., "What timeframe does this pass rate cover?")
+- Inline examples show acceptable formats (percentages, counts, durations) to reduce guesswork
+- Contextual tooltips link to documentation for less common KPIs
+- Validation enforces units and highlights missing rationale before submission
 
 **Report Builder**
 - Select metrics to include via checkboxes
@@ -211,17 +224,19 @@ Content-Type: application/json
 - **Frontend**: Next.js 14 (App Router), TypeScript, Tailwind CSS, shadcn/ui
 - **Backend**: Next.js API routes, Prisma ORM
 - **Database**: PostgreSQL 15+
-- **Authentication**: NextAuth.js (credentials + Google + GitHub)
+- **Authentication**: First-party email/password service with session tokens
 - **PDF Generation**: @react-pdf/renderer or Puppeteer
 - **Deployment**: Docker + Docker Compose (self-hosted)
 
 ### Database Schema (Core Entities)
 ```
 Project (id, name, slug, created_at)
-TestCase (id, project_id, title, description, steps[], tags[], module, priority, status)
+TestCase (id, project_id, display_id, jira_key?, title, description, tags[], module, priority, status)
+TestSuite (id, project_id, name, archived, created_at)
+TestSuiteMembership (suite_id, test_case_id, added_by, added_at)
 TestRun (id, project_id, name, source[manual|automated], created_at, metadata{})
-TestResult (id, run_id, test_case_id?, name, status, duration_ms, failure_message, category, steps_results[])
-User (id, email, name, password_hash, oauth_provider)
+TestResult (id, run_id, test_case_id?, name, status, duration_ms, failure_message, category)
+User (id, email, name, password_hash, last_login_at)
 ApiKey (id, user_id, project_id, key_hash, last_used_at)
 ```
 
@@ -237,7 +252,7 @@ ApiKey (id, user_id, project_id, key_hash, last_used_at)
 
 ### Security Considerations
 - API keys hashed with bcrypt, shown once on creation
-- OAuth tokens stored securely via NextAuth
+- Password hashes stored with bcrypt, session tokens rotated on login
 - Rate limiting: 100 requests/minute per API key
 - Input sanitization for all user-provided content
 - No sensitive data in URL parameters
@@ -248,9 +263,9 @@ ApiKey (id, user_id, project_id, key_hash, last_used_at)
 
 ### Week 1: Core Foundation
 - Project setup (Next.js, Prisma, PostgreSQL, Docker)
-- Authentication (email/password + OAuth)
+- Authentication (email/password only)
 - Project CRUD
-- Test case management (create, edit, organize)
+- Test case management (create, edit, organize) with suite editing and ID prefix settings
 
 ### Week 2: Test Execution & Ingestion
 - Manual test execution flow
@@ -264,6 +279,7 @@ ApiKey (id, user_id, project_id, key_hash, last_used_at)
 - PDF export
 - Flaky test detection algorithm (last 5 runs)
 - Failure categorization
+- Guided metric logging prompts and validations
 
 ### Week 4: Polish & Documentation
 - Coverage heatmap view

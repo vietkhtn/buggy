@@ -36,7 +36,15 @@ export async function GET(request: Request) {
         orderBy: { order: "asc" },
         include: {
           testCase: {
-            select: { id: true, title: true, priority: true, status: true, module: { select: { name: true } } },
+            select: {
+              id: true,
+              title: true,
+              priority: true,
+              status: true,
+              displayId: true,
+              jiraKey: true,
+              module: { select: { name: true } },
+            },
           },
         },
       },
@@ -71,6 +79,7 @@ export async function POST(request: Request) {
           create: payload.testCaseIds.map((tcId, i) => ({
             testCaseId: tcId,
             order: i,
+            addedById: session.user.id,
           })),
         },
       },
@@ -79,7 +88,15 @@ export async function POST(request: Request) {
           orderBy: { order: "asc" },
           include: {
             testCase: {
-              select: { id: true, title: true, priority: true, status: true, module: { select: { name: true } } },
+              select: {
+                id: true,
+                title: true,
+                priority: true,
+                status: true,
+                displayId: true,
+                jiraKey: true,
+                module: { select: { name: true } },
+              },
             },
           },
         },

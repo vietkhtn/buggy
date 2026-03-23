@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
+import { deriveTestCasePrefix } from "@/lib/test-case-ids";
 
 function defaultProjectName(userName: string | null | undefined) {
   if (!userName?.trim()) return "My Project";
@@ -32,11 +33,13 @@ export async function ensureProjectForUser(userId: string) {
 
   const name = defaultProjectName(user?.name);
   const slugBase = slugify(name) || "project";
+  const prefix = deriveTestCasePrefix(name);
 
   return db.project.create({
     data: {
       name,
       slug: `${slugBase}-${randomUUID().slice(0, 8)}`,
+      testCasePrefix: prefix,
       members: {
         create: {
           userId,

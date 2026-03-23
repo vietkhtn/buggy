@@ -4,6 +4,30 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { userHasProjectAccess } from "@/lib/projects";
 
+async function fetchSuiteWithCases(suiteId: string) {
+  return db.testSuite.findUnique({
+    where: { id: suiteId },
+    include: {
+      cases: {
+        orderBy: { order: "asc" },
+        include: {
+          testCase: {
+            select: {
+              id: true,
+              title: true,
+              priority: true,
+              status: true,
+              displayId: true,
+              jiraKey: true,
+              module: { select: { name: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
 async function getSuiteWithAccess(userId: string, suiteId: string) {
   const suite = await db.testSuite.findUnique({ where: { id: suiteId } });
   if (!suite) return null;
@@ -35,11 +59,17 @@ export async function POST(
   const nextOrder = (maxOrder._max.order ?? -1) + 1;
 
   await db.testSuiteCase.createMany({
-    data: testCaseIds.map((tcId, i) => ({ suiteId: id, testCaseId: tcId, order: nextOrder + i })),
+    data: testCaseIds.map((tcId, i) => ({
+      suiteId: id,
+      testCaseId: tcId,
+      order: nextOrder + i,
+      addedById: session.user.id,
+    })),
     skipDuplicates: true,
   });
 
-  return NextResponse.json({ success: true });
+  const suiteWithCases = await fetchSuiteWithCases(id);
+  return NextResponse.json({ success: true, suite: suiteWithCases });
 }
 
 // ─── DELETE /api/test-suites/[id]/cases — remove test cases from suite ───────
@@ -63,5 +93,6 @@ export async function DELETE(
     where: { suiteId: id, testCaseId: { in: testCaseIds } },
   });
 
-  return NextResponse.json({ success: true });
+  const suiteWithCases = await fetchSuiteWithCases(id);
+  return NextResponse.json({ success: true, suite: suiteWithCases });
 }

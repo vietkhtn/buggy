@@ -1,8 +1,6 @@
 import NextAuth from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import Credentials from "next-auth/providers/credentials";
-import Google from "next-auth/providers/google";
-import GitHub from "next-auth/providers/github";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 
@@ -55,22 +53,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         };
       },
     }),
-    ...(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET
-      ? [
-          Google({
-            clientId: process.env.AUTH_GOOGLE_ID,
-            clientSecret: process.env.AUTH_GOOGLE_SECRET,
-          }),
-        ]
-      : []),
-    ...(process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET
-      ? [
-          GitHub({
-            clientId: process.env.AUTH_GITHUB_ID,
-            clientSecret: process.env.AUTH_GITHUB_SECRET,
-          }),
-        ]
-      : []),
   ],
   callbacks: {
     async jwt({ token, user }) {

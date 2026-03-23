@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { ensureProjectForUser, userHasProjectAccess } from "@/lib/projects";
+import { reserveTestCaseDisplayIds } from "@/lib/test-case-ids";
 import * as XLSX from "xlsx";
 
 // ─── POST /api/test-cases/import ──────────────────────────────────────────────
@@ -11,8 +12,7 @@ import * as XLSX from "xlsx";
 //
 // Expected columns (case-insensitive, order flexible):
 //   title (required), description, module, priority, status, tags,
-//   preconditions, steps (pipe-separated "action|expected" pairs,
-//   multiple steps separated by newlines or semicolons)
+//   preconditions, jira (optional reference key)
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -71,10 +71,10 @@ export async function POST(request: Request) {
 
   // Module cache to avoid N+1 upserts
   const moduleCache = new Map<string, string>();
-  async function getModuleId(name: string): Promise<string | null> {
+  async function getModuleId(tx: typeof db, name: string): Promise<string | null> {
     if (!name) return null;
     if (moduleCache.has(name)) return moduleCache.get(name)!;
-    const mod = await db.module.upsert({
+    const mod = await tx.module.upsert({
       where: { projectId_name: { projectId: project.id, name } },
       update: {},
       create: { projectId: project.id, name },
@@ -83,50 +83,46 @@ export async function POST(request: Request) {
     return mod.id;
   }
 
+  function normalizeJiraKey(raw: string | undefined) {
+    if (!raw) return null;
+    const upper = raw.toUpperCase();
+    if (!upper) return null;
+    return /^[A-Z][A-Z0-9]+-\d+$/.test(upper) ? upper : null;
+  }
+
   const created: string[] = [];
   const errors: { row: number; error: string }[] = [];
 
   for (let i = 0; i < valid.length; i++) {
     const row = valid[i];
     try {
-      const moduleId = await getModuleId(row.module ?? "");
+      await db.$transaction(async (tx) => {
+        const moduleId = await getModuleId(tx, row.module ?? "");
+        const tags = (row.tags ?? "")
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean);
+        const jiraKey = normalizeJiraKey(row.jira ?? row.jirakey ?? row.reference);
 
-      // Parse steps: each step is "action|expected"; steps separated by newline or ";"
-      const stepsRaw = row.steps ?? "";
-      const stepLines = stepsRaw.split(/[\n;]+/).map((s) => s.trim()).filter(Boolean);
-      const steps = stepLines.length
-        ? stepLines.map((line) => {
-            const [action, ...rest] = line.split("|");
-            return { action: action?.trim() ?? line.trim(), expectedResult: rest.join("|").trim() || "—" };
-          })
-        : [{ action: "See description", expectedResult: "—" }];
+        const [displayId] = await reserveTestCaseDisplayIds(tx, project.id, 1);
 
-      const tags = (row.tags ?? "")
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean);
-
-      const tc = await db.testCase.create({
-        data: {
-          projectId: project.id,
-          moduleId,
-          title: row.title,
-          description: row.description || undefined,
-          preconditions: row.preconditions || undefined,
-          priority: toPriority(row.priority ?? ""),
-          status: toStatus(row.status ?? ""),
-          tags,
-          steps: {
-            create: steps.map((s, idx) => ({
-              stepNumber: idx + 1,
-              action: s.action,
-              expectedResult: s.expectedResult,
-            })),
+        const tc = await tx.testCase.create({
+          data: {
+            projectId: project.id,
+            moduleId,
+            displayId,
+            jiraKey,
+            title: row.title,
+            description: row.description || undefined,
+            preconditions: row.preconditions || undefined,
+            priority: toPriority(row.priority ?? ""),
+            status: toStatus(row.status ?? ""),
+            tags,
           },
-        },
-        select: { id: true },
+          select: { id: true },
+        });
+        created.push(tc.id);
       });
-      created.push(tc.id);
     } catch (err) {
       errors.push({ row: i + 2, error: String(err) });
     }

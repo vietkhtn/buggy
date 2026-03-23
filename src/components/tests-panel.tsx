@@ -18,10 +18,9 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type TestStep = { action: string; expectedResult: string };
-
 type TestCaseItem = {
   id: string;
+  displayId: string;
   title: string;
   priority: string;
   module: string | null;
@@ -29,7 +28,7 @@ type TestCaseItem = {
   description?: string | null;
   preconditions?: string | null;
   tags?: string[];
-  steps?: TestStep[];
+  jiraKey?: string | null;
 };
 
 type ManualResult = {
@@ -49,9 +48,11 @@ type SuiteCase = {
   id: string;
   testCase: {
     id: string;
+    displayId: string;
     title: string;
     priority: string;
     status: string;
+    jiraKey: string | null;
     module: { name: string } | null;
   };
 };
@@ -65,6 +66,7 @@ type TestSuite = {
 
 type Props = {
   projectId: string;
+  testCasePrefix: string;
   testCases: TestCaseItem[];
   activeManualRun: ManualRun | null;
   suites: TestSuite[];
@@ -103,20 +105,21 @@ const CASE_STATUS_DOT: Record<string, string> = {
 // ─── Shared form fields ───────────────────────────────────────────────────────
 
 function CaseFormFields({
-  steps,
-  setSteps,
   showAdvanced,
   setShowAdvanced,
   defaults,
-  allowAddSteps = true,
+  testCasePrefix,
+  readOnlyDisplayId,
 }: {
-  steps: TestStep[];
-  setSteps: React.Dispatch<React.SetStateAction<TestStep[]>>;
   showAdvanced: boolean;
   setShowAdvanced: (v: boolean) => void;
   defaults?: Partial<TestCaseItem>;
-  allowAddSteps?: boolean;
+  testCasePrefix: string;
+  readOnlyDisplayId?: string;
 }) {
+  const prefixPreview = (testCasePrefix || "TC").toUpperCase();
+  const idHint = `${prefixPreview}-0001`;
+
   return (
     <>
       <div className="space-y-1">
@@ -130,7 +133,16 @@ function CaseFormFields({
           maxLength={200}
           defaultValue={defaults?.title ?? ""}
         />
+        <p className="text-xs text-muted-foreground">IDs auto-generate like {idHint} when saved.</p>
       </div>
+
+      {readOnlyDisplayId && (
+        <div className="space-y-1">
+          <Label>Case ID</Label>
+          <Input value={readOnlyDisplayId} readOnly disabled />
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
           <Label htmlFor="tc-module">Module</Label>
@@ -143,71 +155,52 @@ function CaseFormFields({
           />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="tc-description">Description</Label>
+          <Label htmlFor="tc-jira">Jira reference</Label>
           <Input
-            id="tc-description"
-            name="description"
+            id="tc-jira"
+            name="jiraKey"
             type="text"
-            placeholder="Brief description"
-            defaultValue={defaults?.description ?? ""}
+            placeholder="ABC-1234"
+            defaultValue={defaults?.jiraKey ?? ""}
+            pattern="[A-Za-z][A-Za-z0-9]+-\\d+"
+            title="Format: PROJECT-123"
           />
         </div>
       </div>
 
-      {/* Steps */}
-      <div className="space-y-2">
-        <Label>Steps *</Label>
-        {steps.map((step, index) => (
-          <div key={index} className="rounded-md border border-border p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Step {index + 1}</span>
-              {steps.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => setSteps((prev) => prev.filter((_, i) => i !== index))}
-                  className="text-xs text-destructive hover:underline"
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-            <textarea
-              required
-              value={step.action}
-              onChange={(e) =>
-                setSteps((prev) =>
-                  prev.map((s, i) => (i === index ? { ...s, action: e.target.value } : s))
-                )
-              }
-              placeholder="Action"
-              className="h-14 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
-            <textarea
-              value={step.expectedResult}
-              onChange={(e) =>
-                setSteps((prev) =>
-                  prev.map((s, i) =>
-                    i === index ? { ...s, expectedResult: e.target.value } : s
-                  )
-                )
-              }
-              placeholder="Expected result"
-              className="h-14 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
-          </div>
-        ))}
-        {allowAddSteps && (
-          <button
-            type="button"
-            onClick={() => setSteps((prev) => [...prev, { action: "", expectedResult: "" }])}
-            className="text-xs text-primary hover:underline"
-          >
-            + Add another step
-          </button>
-        )}
+      <div className="space-y-1">
+        <Label htmlFor="tc-description">Description</Label>
+        <textarea
+          id="tc-description"
+          name="description"
+          placeholder="Brief description"
+          defaultValue={defaults?.description ?? ""}
+          className="h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
       </div>
 
-      {/* Advanced toggle */}
+      <div className="space-y-1">
+        <Label htmlFor="tc-preconditions">Preconditions</Label>
+        <textarea
+          id="tc-preconditions"
+          name="preconditions"
+          placeholder="e.g. User must be registered"
+          defaultValue={defaults?.preconditions ?? ""}
+          className="h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <Label htmlFor="tc-tags">Tags</Label>
+        <Input
+          id="tc-tags"
+          name="tags"
+          type="text"
+          placeholder="smoke, regression"
+          defaultValue={(defaults?.tags ?? []).join(", ")}
+        />
+      </div>
+
       <div>
         <button
           type="button"
@@ -249,26 +242,6 @@ function CaseFormFields({
               </select>
             </div>
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="tc-tags">Tags</Label>
-            <Input
-              id="tc-tags"
-              name="tags"
-              type="text"
-              placeholder="smoke, regression"
-              defaultValue={(defaults?.tags ?? []).join(", ")}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="tc-preconditions">Preconditions</Label>
-            <textarea
-              id="tc-preconditions"
-              name="preconditions"
-              placeholder="e.g. User must be registered"
-              defaultValue={defaults?.preconditions ?? ""}
-              className="h-14 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
-          </div>
         </div>
       )}
     </>
@@ -277,18 +250,16 @@ function CaseFormFields({
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function TestsPanel({ projectId, testCases, activeManualRun, suites: initialSuites }: Props) {
+export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualRun, suites: initialSuites }: Props) {
   const router = useRouter();
 
   // ── Create dialog ────────────────────────────────────────────────────────────
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [creatingCase, setCreatingCase] = useState(false);
-  const [createSteps, setCreateSteps] = useState([{ action: "", expectedResult: "" }]);
   const [createShowAdvanced, setCreateShowAdvanced] = useState(false);
 
   // ── Edit dialog ──────────────────────────────────────────────────────────────
   const [editTarget, setEditTarget] = useState<TestCaseItem | null>(null);
-  const [editSteps, setEditSteps] = useState<TestStep[]>([]);
   const [editShowAdvanced, setEditShowAdvanced] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -320,6 +291,10 @@ export function TestsPanel({ projectId, testCases, activeManualRun, suites: init
   const [suiteSelectedCases, setSuiteSelectedCases] = useState<string[]>([]);
   const [expandedSuite, setExpandedSuite] = useState<string | null>(null);
   const [deletingSuiteId, setDeletingSuiteId] = useState<string | null>(null);
+  const [manageSuiteTarget, setManageSuiteTarget] = useState<TestSuite | null>(null);
+  const [manageSelectedCases, setManageSelectedCases] = useState<string[]>([]);
+  const [manageCaseSearch, setManageCaseSearch] = useState("");
+  const [updatingSuiteCases, setUpdatingSuiteCases] = useState(false);
 
   // ─── Derived ─────────────────────────────────────────────────────────────────
 
@@ -347,6 +322,14 @@ export function TestsPanel({ projectId, testCases, activeManualRun, suites: init
     );
   }, [testCases, suiteCaseSearch]);
 
+  const filteredManageCases = useMemo(() => {
+    if (!manageCaseSearch.trim()) return testCases;
+    const q = manageCaseSearch.toLowerCase();
+    return testCases.filter(
+      (tc) => tc.title.toLowerCase().includes(q) || tc.displayId.toLowerCase().includes(q)
+    );
+  }, [testCases, manageCaseSearch]);
+
   const pendingResults = useMemo(
     () => activeManualRun?.results.filter((r) => r.status === "BLOCKED") ?? [],
     [activeManualRun]
@@ -354,8 +337,9 @@ export function TestsPanel({ projectId, testCases, activeManualRun, suites: init
 
   // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-  function buildCasePayload(form: HTMLFormElement, steps: TestStep[]) {
+  function buildCasePayload(form: HTMLFormElement) {
     const formData = new FormData(form);
+    const jiraRaw = String(formData.get("jiraKey") ?? "").trim();
     return {
       projectId,
       title: String(formData.get("title") ?? "").trim(),
@@ -368,7 +352,7 @@ export function TestsPanel({ projectId, testCases, activeManualRun, suites: init
         .filter(Boolean),
       priority: String(formData.get("priority") ?? "MEDIUM"),
       status: String(formData.get("status") ?? "ACTIVE"),
-      steps: steps.filter((s) => s.action.trim()),
+      jiraKey: jiraRaw ? jiraRaw.toUpperCase() : null,
     };
   }
 
@@ -379,13 +363,7 @@ export function TestsPanel({ projectId, testCases, activeManualRun, suites: init
     const form = event.currentTarget;
     setCreatingCase(true);
 
-    const payload = buildCasePayload(form, createSteps);
-
-    if (!payload.steps.length) {
-      toast.error("Add at least one step with an action.");
-      setCreatingCase(false);
-      return;
-    }
+    const payload = buildCasePayload(form);
 
     const toastId = toast.loading("Saving test case…");
 
@@ -404,7 +382,6 @@ export function TestsPanel({ projectId, testCases, activeManualRun, suites: init
 
       toast.success("Test case created.", { id: toastId });
       form.reset();
-      setCreateSteps([{ action: "", expectedResult: "" }]);
       setCreateShowAdvanced(false);
       setShowCreateDialog(false);
       router.refresh();
@@ -418,18 +395,7 @@ export function TestsPanel({ projectId, testCases, activeManualRun, suites: init
   // ─── Open edit dialog ────────────────────────────────────────────────────────
 
   async function openEdit(tc: TestCaseItem) {
-    // Fetch full record (with steps) if not already loaded
-    if (!tc.steps) {
-      try {
-        const res = await fetch(`/api/test-cases/${tc.id}`);
-        if (res.ok) {
-          const body = await res.json() as { testCase: TestCaseItem };
-          tc = body.testCase;
-        }
-      } catch { /* fall through with partial data */ }
-    }
     setEditTarget(tc);
-    setEditSteps(tc.steps?.length ? tc.steps : [{ action: "", expectedResult: "" }]);
     setEditShowAdvanced(false);
   }
 
@@ -440,12 +406,7 @@ export function TestsPanel({ projectId, testCases, activeManualRun, suites: init
     if (!editTarget) return;
     setSavingEdit(true);
 
-    const payload = buildCasePayload(event.currentTarget, editSteps);
-    if (!payload.steps.length) {
-      toast.error("Add at least one step.");
-      setSavingEdit(false);
-      return;
-    }
+    const payload = buildCasePayload(event.currentTarget);
 
     const toastId = toast.loading("Saving changes…");
 
@@ -685,6 +646,74 @@ export function TestsPanel({ projectId, testCases, activeManualRun, suites: init
     }
   }
 
+  function openManageSuiteDialog(suite: TestSuite) {
+    setManageSuiteTarget(suite);
+    setManageSelectedCases(suite.cases.map((c) => c.testCase.id));
+    setManageCaseSearch("");
+  }
+
+  async function saveSuiteMembership(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!manageSuiteTarget) return;
+    setUpdatingSuiteCases(true);
+
+    const original = new Set(manageSuiteTarget.cases.map((c) => c.testCase.id));
+    const desired = new Set(manageSelectedCases);
+    const toAdd = Array.from(desired).filter((id) => !original.has(id));
+    const toRemove = Array.from(original).filter((id) => !desired.has(id));
+
+    if (!toAdd.length && !toRemove.length) {
+      setManageSuiteTarget(null);
+      setUpdatingSuiteCases(false);
+      return;
+    }
+
+    try {
+      let updatedSuite: TestSuite | null = manageSuiteTarget;
+
+      if (toAdd.length) {
+        const response = await fetch(`/api/test-suites/${manageSuiteTarget.id}/cases`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ testCaseIds: toAdd }),
+        });
+        const payload = (await response.json().catch(() => ({}))) as { error?: string; suite?: TestSuite };
+        if (!response.ok) {
+          toast.error(payload.error ?? "Unable to add cases.");
+          setUpdatingSuiteCases(false);
+          return;
+        }
+        updatedSuite = payload.suite ?? updatedSuite;
+      }
+
+      if (toRemove.length) {
+        const response = await fetch(`/api/test-suites/${manageSuiteTarget.id}/cases`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ testCaseIds: toRemove }),
+        });
+        const payload = (await response.json().catch(() => ({}))) as { error?: string; suite?: TestSuite };
+        if (!response.ok) {
+          toast.error(payload.error ?? "Unable to remove cases.");
+          setUpdatingSuiteCases(false);
+          return;
+        }
+        updatedSuite = payload.suite ?? updatedSuite;
+      }
+
+      if (updatedSuite) {
+        setSuites((prev) => prev.map((suite) => (suite.id === updatedSuite!.id ? updatedSuite! : suite)));
+      }
+
+      toast.success("Suite updated.");
+      setManageSuiteTarget(null);
+    } catch {
+      toast.error("Network error — suite not updated.");
+    } finally {
+      setUpdatingSuiteCases(false);
+    }
+  }
+
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   return (
@@ -695,7 +724,6 @@ export function TestsPanel({ projectId, testCases, activeManualRun, suites: init
         onOpenChange={(open) => {
           setShowCreateDialog(open);
           if (!open) {
-            setCreateSteps([{ action: "", expectedResult: "" }]);
             setCreateShowAdvanced(false);
           }
         }}
@@ -707,11 +735,9 @@ export function TestsPanel({ projectId, testCases, activeManualRun, suites: init
           </DialogHeader>
           <form className="space-y-4" onSubmit={createTestCase}>
             <CaseFormFields
-              steps={createSteps}
-              setSteps={setCreateSteps}
               showAdvanced={createShowAdvanced}
               setShowAdvanced={setCreateShowAdvanced}
-              allowAddSteps={false}
+              testCasePrefix={testCasePrefix}
             />
             <div className="flex justify-end gap-3 pt-2">
               <Button type="button" variant="outline" onClick={() => setShowCreateDialog(false)}>
@@ -734,11 +760,11 @@ export function TestsPanel({ projectId, testCases, activeManualRun, suites: init
           </DialogHeader>
           <form className="space-y-4" onSubmit={saveEdit}>
             <CaseFormFields
-              steps={editSteps}
-              setSteps={setEditSteps}
               showAdvanced={editShowAdvanced}
               setShowAdvanced={setEditShowAdvanced}
               defaults={editTarget ?? undefined}
+              testCasePrefix={testCasePrefix}
+              readOnlyDisplayId={editTarget?.displayId}
             />
             <div className="flex justify-end gap-3 pt-2">
               <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>
@@ -758,7 +784,7 @@ export function TestsPanel({ projectId, testCases, activeManualRun, suites: init
           <DialogHeader>
             <DialogTitle>Delete test case?</DialogTitle>
             <DialogDescription>
-              &ldquo;{deleteTarget?.title}&rdquo; will be permanently deleted along with its steps and results.
+              &ldquo;{deleteTarget?.title}&rdquo; will be permanently deleted. Historical run data remains untouched.
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-3 pt-2">
@@ -778,9 +804,8 @@ export function TestsPanel({ projectId, testCases, activeManualRun, suites: init
           <DialogHeader>
             <DialogTitle>Import test cases</DialogTitle>
             <DialogDescription>
-              Upload an Excel (.xlsx, .xls) or CSV file. Required column: <strong>title</strong>. Optional: description, module, priority, status, tags, preconditions, steps.
-              <br />
-              Steps format: <code className="text-xs bg-muted px-1 rounded">action|expected result</code>, one per line.
+              Upload an Excel (.xlsx, .xls) or CSV file. Required column: <strong>title</strong>. Optional:
+              description, module, priority, status, tags, preconditions, <em>jira</em>.
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleImport}>
@@ -885,6 +910,82 @@ export function TestsPanel({ projectId, testCases, activeManualRun, suites: init
         </DialogContent>
       </Dialog>
 
+      {/* ── Manage suite dialog ── */}
+      <Dialog
+        open={!!manageSuiteTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setManageSuiteTarget(null);
+            setManageSelectedCases([]);
+            setManageCaseSearch("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Manage cases</DialogTitle>
+            <DialogDescription>
+              Add or remove test cases in &ldquo;{manageSuiteTarget?.name}&rdquo;.
+            </DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={saveSuiteMembership}>
+            <Input
+              type="search"
+              placeholder="Search by title or ID…"
+              value={manageCaseSearch}
+              onChange={(e) => setManageCaseSearch(e.target.value)}
+            />
+            <div className="max-h-64 overflow-auto rounded-lg border border-border">
+              <div className="space-y-0.5 p-2">
+                {filteredManageCases.map((tc) => {
+                  const selected = manageSelectedCases.includes(tc.id);
+                  return (
+                    <label
+                      key={tc.id}
+                      className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted"
+                    >
+                      <input
+                        type="checkbox"
+                        className="accent-primary"
+                        checked={selected}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setManageSelectedCases((cur) => [...cur, tc.id]);
+                          } else {
+                            setManageSelectedCases((cur) => cur.filter((id) => id !== tc.id));
+                          }
+                        }}
+                      />
+                      <div className="flex-1">
+                        <p className="truncate text-sm">{tc.title}</p>
+                        <p className="text-xs text-muted-foreground">{tc.displayId}</p>
+                      </div>
+                      <Badge variant={PRIORITY_VARIANT[tc.priority] ?? "outline"} className="text-[10px]">
+                        {tc.priority}
+                      </Badge>
+                    </label>
+                  );
+                })}
+                {filteredManageCases.length === 0 && (
+                  <p className="px-2 py-3 text-sm text-muted-foreground">No matches.</p>
+                )}
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {manageSelectedCases.length} case{manageSelectedCases.length !== 1 ? "s" : ""} selected
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button type="button" variant="outline" onClick={() => setManageSuiteTarget(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={updatingSuiteCases}>
+                {updatingSuiteCases ? "Saving…" : "Save changes"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Page header ── */}
       <header className="flex items-center justify-between gap-4 mb-8">
         <div>
@@ -969,8 +1070,10 @@ export function TestsPanel({ projectId, testCases, activeManualRun, suites: init
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/40">
+                      <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Case ID</th>
                       <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Title</th>
                       <th className="hidden px-4 py-2.5 text-left text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground sm:table-cell">Module</th>
+                      <th className="hidden px-4 py-2.5 text-left text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground md:table-cell">Jira</th>
                       <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Priority</th>
                       <th className="hidden px-4 py-2.5 text-left text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground md:table-cell">Status</th>
                       <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Actions</th>
@@ -979,13 +1082,22 @@ export function TestsPanel({ projectId, testCases, activeManualRun, suites: init
                   <tbody className="divide-y divide-border bg-card">
                     {filteredCases.map((tc) => (
                       <tr key={tc.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="px-4 py-3 font-medium">{tc.title}</td>
+                        <td className="px-4 py-3 font-semibold tabular-nums">{tc.displayId}</td>
+                        <td className="px-4 py-3">
+                          <div className="font-medium">{tc.title}</div>
+                          {tc.description && (
+                            <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{tc.description}</p>
+                          )}
+                        </td>
                         <td className="hidden px-4 py-3 sm:table-cell">
                           {tc.module ? (
                             <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{tc.module}</span>
                           ) : (
                             <span className="text-muted-foreground/40">—</span>
                           )}
+                        </td>
+                        <td className="hidden px-4 py-3 text-sm text-muted-foreground md:table-cell">
+                          {tc.jiraKey ? <span className="font-medium">{tc.jiraKey}</span> : <span className="text-muted-foreground/40">—</span>}
                         </td>
                         <td className="px-4 py-3">
                           <Badge variant={PRIORITY_VARIANT[tc.priority] ?? "outline"} className="text-xs">
@@ -1081,6 +1193,17 @@ export function TestsPanel({ projectId, testCases, activeManualRun, suites: init
                         <span className="text-xs text-muted-foreground">
                           {suite.cases.length} case{suite.cases.length !== 1 ? "s" : ""}
                         </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openManageSuiteDialog(suite);
+                          }}
+                        >
+                          Manage cases
+                        </Button>
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); deleteSuite(suite.id); }}
@@ -1102,7 +1225,13 @@ export function TestsPanel({ projectId, testCases, activeManualRun, suites: init
                         ) : (
                           suite.cases.map((sc) => (
                             <div key={sc.id} className="flex items-center gap-3 px-4 py-2.5 bg-card hover:bg-muted/20 transition-colors">
-                              <span className="flex-1 text-sm">{sc.testCase.title}</span>
+                              <div className="flex-1">
+                                <p className="text-sm font-medium">{sc.testCase.title}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {sc.testCase.displayId}
+                                  {sc.testCase.jiraKey ? ` · ${sc.testCase.jiraKey}` : ""}
+                                </p>
+                              </div>
                               {sc.testCase.module && (
                                 <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                                   {sc.testCase.module.name}
@@ -1165,6 +1294,9 @@ export function TestsPanel({ projectId, testCases, activeManualRun, suites: init
                           }}
                         />
                         <span className="flex-1 truncate">{testCase.title}</span>
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+                          {testCase.displayId}
+                        </span>
                         <span className="flex shrink-0 items-center gap-1">
                           {testCase.module && (
                             <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">

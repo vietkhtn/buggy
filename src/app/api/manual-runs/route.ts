@@ -32,10 +32,10 @@ export async function POST(request: Request) {
         id: { in: payload.testCaseIds },
         projectId: project.id,
       },
-      include: {
-        steps: {
-          orderBy: { stepNumber: "asc" },
-        },
+      select: {
+        id: true,
+        title: true,
+        displayId: true,
       },
     });
 
@@ -51,17 +51,10 @@ export async function POST(request: Request) {
         source: "MANUAL",
         status: "IN_PROGRESS",
         results: {
-          create: testCases.map((testCase: { id: string; title: string; steps: Array<{ stepNumber: number; action: string; expectedResult: string }> }) => ({
+          create: testCases.map((testCase) => ({
             testCaseId: testCase.id,
-            name: testCase.title,
+            name: `${testCase.displayId} · ${testCase.title}`,
             status: "BLOCKED",
-            stepsResults: testCase.steps.map((step: { stepNumber: number; action: string; expectedResult: string }) => ({
-              stepNumber: step.stepNumber,
-              action: step.action,
-              expectedResult: step.expectedResult,
-              status: "BLOCKED",
-              notes: null,
-            })),
           })),
         },
       },

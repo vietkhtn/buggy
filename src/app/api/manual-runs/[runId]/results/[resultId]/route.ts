@@ -7,7 +7,6 @@ import { userHasProjectAccess } from "@/lib/projects";
 const updateResultSchema = z.object({
   status: z.enum(["PASSED", "FAILED", "BLOCKED"]),
   notes: z.string().max(10_000).optional(),
-  stepsResults: z.array(z.record(z.string(), z.any())).optional(),
 });
 
 export async function PATCH(
@@ -52,7 +51,6 @@ export async function PATCH(
       data: {
         status: payload.status,
         notes: payload.notes,
-        stepsResults: payload.stepsResults,
       },
     });
 

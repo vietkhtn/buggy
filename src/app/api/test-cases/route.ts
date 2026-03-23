@@ -3,13 +3,17 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { ensureProjectForUser, userHasProjectAccess } from "@/lib/projects";
+import { reserveTestCaseDisplayIds } from "@/lib/test-case-ids";
 
 // ─── Validation Schemas ───────────────────────────────────────────────────────
 
-const stepSchema = z.object({
-  action: z.string().trim().min(1),
-  expectedResult: z.string().trim().min(1),
-});
+const jiraKeySchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(32)
+  .regex(/^[A-Z][A-Z0-9]+-\d+$/, { message: "Invalid Jira issue key." })
+  .transform((value) => value.toUpperCase());
 
 const createTestCaseSchema = z.object({
   projectId: z.string().min(1).optional(),
@@ -20,7 +24,7 @@ const createTestCaseSchema = z.object({
   moduleName: z.string().trim().min(1).max(120).optional(),
   priority: z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW"]).default("MEDIUM"),
   status: z.enum(["DRAFT", "ACTIVE", "DEPRECATED"]).default("DRAFT"),
-  steps: z.array(stepSchema).min(1),
+  jiraKey: jiraKeySchema.optional().nullable(),
 });
 
 // ─── GET /api/test-cases ──────────────────────────────────────────────────────
@@ -62,7 +66,6 @@ export async function GET(request: Request) {
     },
     include: {
       module: true,
-      steps: { orderBy: { stepNumber: "asc" } },
     },
     orderBy: { createdAt: "desc" },
     // Fetch one extra record to determine whether another page exists.
@@ -101,44 +104,42 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const moduleRecord = payload.moduleName
-      ? await db.module.upsert({
-          where: {
-            projectId_name: {
+    const testCase = await db.$transaction(async (tx) => {
+      const moduleRecord = payload.moduleName
+        ? await tx.module.upsert({
+            where: {
+              projectId_name: {
+                projectId: project.id,
+                name: payload.moduleName,
+              },
+            },
+            update: {},
+            create: {
               projectId: project.id,
               name: payload.moduleName,
             },
-          },
-          update: {},
-          create: {
-            projectId: project.id,
-            name: payload.moduleName,
-          },
-        })
-      : null;
+          })
+        : null;
 
-    const testCase = await db.testCase.create({
-      data: {
-        projectId: project.id,
-        moduleId: moduleRecord?.id,
-        title: payload.title,
-        description: payload.description,
-        preconditions: payload.preconditions,
-        tags: payload.tags,
-        priority: payload.priority,
-        status: payload.status,
-        steps: {
-          create: payload.steps.map((step, index) => ({
-            stepNumber: index + 1,
-            action: step.action,
-            expectedResult: step.expectedResult,
-          })),
+      const [displayId] = await reserveTestCaseDisplayIds(tx, project.id, 1);
+
+      return tx.testCase.create({
+        data: {
+          projectId: project.id,
+          moduleId: moduleRecord?.id,
+          displayId,
+          jiraKey: payload.jiraKey ?? null,
+          title: payload.title,
+          description: payload.description,
+          preconditions: payload.preconditions,
+          tags: payload.tags,
+          priority: payload.priority,
+          status: payload.status,
         },
-      },
-      include: {
-        steps: { orderBy: { stepNumber: "asc" } },
-        module: true,
-      },
+        include: {
+          module: true,
+        },
+      });
     });
 
     return NextResponse.json({ testCase }, { status: 201 });

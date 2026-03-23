@@ -37,6 +37,7 @@ export default async function SettingsPage() {
 
       <SettingsPanel
         projectId={project.id}
+        testCasePrefix={project.testCasePrefix}
         apiKeys={
           apiKeys as Array<{
             id: string;

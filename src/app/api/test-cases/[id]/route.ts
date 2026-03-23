@@ -4,10 +4,13 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { userHasProjectAccess } from "@/lib/projects";
 
-const stepSchema = z.object({
-  action: z.string().trim().min(1),
-  expectedResult: z.string().trim().min(1),
-});
+const jiraKeySchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(32)
+  .regex(/^[A-Z][A-Z0-9]+-\d+$/)
+  .transform((value) => value.toUpperCase());
 
 const updateTestCaseSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
@@ -17,13 +20,13 @@ const updateTestCaseSchema = z.object({
   moduleName: z.string().trim().min(1).max(120).optional().nullable(),
   priority: z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW"]).optional(),
   status: z.enum(["DRAFT", "ACTIVE", "DEPRECATED"]).optional(),
-  steps: z.array(stepSchema).min(1).optional(),
+  jiraKey: jiraKeySchema.optional().nullable(),
 });
 
 async function getTestCaseWithAccess(userId: string, testCaseId: string) {
   const testCase = await db.testCase.findUnique({
     where: { id: testCaseId },
-    include: { steps: { orderBy: { stepNumber: "asc" } }, module: true },
+    include: { module: true },
   });
 
   if (!testCase) return null;
@@ -88,19 +91,10 @@ export async function PUT(
         ...(payload.tags !== undefined && { tags: payload.tags }),
         ...(payload.priority !== undefined && { priority: payload.priority }),
         ...(payload.status !== undefined && { status: payload.status }),
+        ...(payload.jiraKey !== undefined && { jiraKey: payload.jiraKey ?? null }),
         moduleId,
-        ...(payload.steps !== undefined && {
-          steps: {
-            deleteMany: {},
-            create: payload.steps.map((s, i) => ({
-              stepNumber: i + 1,
-              action: s.action,
-              expectedResult: s.expectedResult,
-            })),
-          },
-        }),
       },
-      include: { steps: { orderBy: { stepNumber: "asc" } }, module: true },
+      include: { module: true },
     });
 
     return NextResponse.json({ testCase: updated });

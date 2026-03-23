@@ -20,10 +20,15 @@ export default async function TestsPage() {
       take: 10_000,
       select: {
         id: true,
+        displayId: true,
         title: true,
         priority: true,
         module: { select: { name: true } },
         status: true,
+        description: true,
+        preconditions: true,
+        tags: true,
+        jiraKey: true,
       },
     }),
     db.testRun.findFirst({
@@ -50,9 +55,11 @@ export default async function TestsPage() {
             testCase: {
               select: {
                 id: true,
+                displayId: true,
                 title: true,
                 priority: true,
                 status: true,
+                jiraKey: true,
                 module: { select: { name: true } },
               },
             },
@@ -65,17 +72,27 @@ export default async function TestsPage() {
   const mappedTestCases = (
     testCases as Array<{
       id: string;
+      displayId: string;
       title: string;
       priority: string;
       module: { name: string } | null;
       status: string;
+      description: string | null;
+      preconditions: string | null;
+      tags: string[];
+      jiraKey: string | null;
     }>
   ).map((tc) => ({
     id: tc.id,
+    displayId: tc.displayId,
     title: tc.title,
     priority: tc.priority,
     module: tc.module?.name ?? null,
     status: tc.status,
+    description: tc.description,
+    preconditions: tc.preconditions,
+    tags: tc.tags,
+    jiraKey: tc.jiraKey,
   }));
 
   const mappedRun = activeManualRun
@@ -95,6 +112,7 @@ export default async function TestsPage() {
     <main className="mx-auto w-full max-w-6xl px-6 py-8">
       <TestsPanel
         projectId={project.id}
+        testCasePrefix={project.testCasePrefix}
         testCases={mappedTestCases}
         activeManualRun={mappedRun}
         suites={suites}

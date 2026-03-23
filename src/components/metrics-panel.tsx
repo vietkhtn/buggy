@@ -330,59 +330,64 @@ export function MetricsPanel({
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={logReport}>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="req-covered">Requirements covered</Label>
-                <Input
-                  id="req-covered"
-                  name="requirementsCovered"
-                  type="number"
-                  min={0}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="req-covered">Requirements covered</Label>
+                  <p className="text-xs text-muted-foreground">How many requirements currently have passing tests? Example: 42.</p>
+                  <Input
+                    id="req-covered"
+                    name="requirementsCovered"
+                    type="number"
+                    min={0}
                   defaultValue={latestReport?.requirementsCovered ?? 0}
                   required
                 />
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="req-total">Total requirements</Label>
-                <Input
-                  id="req-total"
-                  name="totalRequirements"
-                  type="number"
+                <div className="space-y-1">
+                  <Label htmlFor="req-total">Total requirements</Label>
+                  <p className="text-xs text-muted-foreground">What is the total requirement count in scope for this release? Example: 50.</p>
+                  <Input
+                    id="req-total"
+                    name="totalRequirements"
+                    type="number"
                   min={0}
                   defaultValue={latestReport?.totalRequirements ?? 0}
                   required
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="bugs-testing">Bugs found in testing</Label>
-                <Input
-                  id="bugs-testing"
-                  name="testingBugsFound"
-                  type="number"
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="bugs-testing">Bugs found in testing</Label>
+                  <p className="text-xs text-muted-foreground">How many issues were caught before release (this sprint/run)? Example: 7.</p>
+                  <Input
+                    id="bugs-testing"
+                    name="testingBugsFound"
+                    type="number"
                   min={0}
                   defaultValue={latestReport?.testingBugsFound ?? 0}
                   required
                 />
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="bugs-prod">Bugs found in production</Label>
-                <Input
-                  id="bugs-prod"
-                  name="productionBugsFound"
-                  type="number"
+                <div className="space-y-1">
+                  <Label htmlFor="bugs-prod">Bugs found in production</Label>
+                  <p className="text-xs text-muted-foreground">How many escaped to prod in the same window? Example: 1.</p>
+                  <Input
+                    id="bugs-prod"
+                    name="productionBugsFound"
+                    type="number"
                   min={0}
                   defaultValue={latestReport?.productionBugsFound ?? 0}
                   required
                 />
               </div>
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="notes">Notes (optional)</Label>
-              <textarea
-                id="notes"
-                name="notes"
+              <div className="space-y-1">
+                <Label htmlFor="notes">Notes (optional)</Label>
+                <p className="text-xs text-muted-foreground">What context explains this data? Example: &ldquo;Sprint 18 mobile release&rdquo;.</p>
+                <textarea
+                  id="notes"
+                  name="notes"
                 placeholder="e.g. Sprint 12 data"
                 defaultValue={latestReport?.notes ?? ""}
                 className="h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

@@ -29,6 +29,7 @@ model User {
   projects      ProjectMember[]
   apiKeys       ApiKey[]
   testRuns      TestRun[]       @relation("CreatedBy")
+  suiteAssignments TestSuiteCase[] @relation("SuiteCaseAddedBy")
 
   @@map("users")
 }
@@ -81,6 +82,8 @@ model Project {
   name        String
   slug        String   @unique
   description String?
+  testCasePrefix String   @default("TC")
+  testCaseCounter Int     @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -137,6 +140,8 @@ model TestCase {
   id            String         @id @default(cuid())
   projectId     String
   moduleId      String?
+  displayId     String
+  jiraKey       String?        @db.VarChar(32)
   title         String         @db.VarChar(200)
   description   String?        @db.Text
   preconditions String?        @db.Text
@@ -148,12 +153,12 @@ model TestCase {
 
   project    Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   module     Module?          @relation(fields: [moduleId], references: [id], onDelete: SetNull)
-  steps      TestStep[]
   results    TestResult[]
   suiteItems TestSuiteCase[]
 
   @@index([projectId])
   @@index([moduleId])
+  @@unique([projectId, displayId])
   @@map("test_cases")
 }
 
@@ -168,19 +173,6 @@ enum TestCaseStatus {
   DRAFT
   ACTIVE
   DEPRECATED
-}
-
-model TestStep {
-  id             String @id @default(cuid())
-  testCaseId     String
-  stepNumber     Int
-  action         String @db.Text
-  expectedResult String @db.Text
-
-  testCase TestCase @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
-
-  @@unique([testCaseId, stepNumber])
-  @@map("test_steps")
 }
 
 // ============================================
@@ -231,7 +223,6 @@ model TestResult {
   stackTrace     String?        @db.Text
   category       FailureCategory?
   metadata       Json?          // For storing additional data
-  stepsResults   Json?          // For manual test step-by-step results
   notes          String?        @db.Text
   attachments    String[]       @default([])
   createdAt      DateTime       @default(now())
@@ -310,9 +301,12 @@ model TestSuiteCase {
   suiteId    String
   testCaseId String
   order      Int    @default(0)
+  addedById  String?
+  addedAt    DateTime @default(now())
 
   suite    TestSuite @relation(fields: [suiteId], references: [id], onDelete: Cascade)
   testCase TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+  addedBy  User?     @relation("SuiteCaseAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
 
   @@unique([suiteId, testCaseId])
   @@map("test_suite_cases")

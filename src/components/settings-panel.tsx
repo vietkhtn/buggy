@@ -27,12 +27,13 @@ type ApiKeyItem = {
 
 type Props = {
   projectId: string;
+  testCasePrefix: string;
   apiKeys: ApiKeyItem[];
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function SettingsPanel({ projectId, apiKeys }: Props) {
+export function SettingsPanel({ projectId, apiKeys, testCasePrefix }: Props) {
   const router = useRouter();
 
   const [creatingKey, setCreatingKey] = useState(false);
@@ -41,6 +42,9 @@ export function SettingsPanel({ projectId, apiKeys }: Props) {
   const [keyConfirmed, setKeyConfirmed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [prefix, setPrefix] = useState(testCasePrefix);
+  const [updatingPrefix, setUpdatingPrefix] = useState(false);
+  const [prefixError, setPrefixError] = useState<string | null>(null);
 
   // ─── Create API key ─────────────────────────────────────────────────────────
 
@@ -147,6 +151,42 @@ export function SettingsPanel({ projectId, apiKeys }: Props) {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  function previewIdValue(value: string) {
+    const cleaned = value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6) || "TC";
+    return `${cleaned}-0007`;
+  }
+
+  async function updatePrefix(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setUpdatingPrefix(true);
+    setPrefixError(null);
+
+    const nextValue = prefix.trim().toUpperCase();
+    const cleaned = nextValue.replace(/[^A-Z0-9]/g, "").slice(0, 6);
+    setPrefix(cleaned);
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}/settings`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ testCasePrefix: cleaned }),
+      });
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        setPrefixError(body.error ?? "Unable to update prefix.");
+        return;
+      }
+
+      toast.success("Test case prefix updated.");
+      router.refresh();
+    } catch {
+      setPrefixError("Network error — prefix not saved.");
+    } finally {
+      setUpdatingPrefix(false);
+    }
+  }
+
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -207,6 +247,41 @@ export function SettingsPanel({ projectId, apiKeys }: Props) {
       </Dialog>
 
       <div className="space-y-8">
+        {/* ── Test Case ID Prefix ── */}
+        <Card>
+          <CardHeader className="pb-3">
+            <h2 className="text-base font-semibold">Test Case IDs</h2>
+            <p className="text-sm text-muted-foreground">
+              Control the prefix used when auto-generating IDs (e.g. BUG-0007).
+            </p>
+          </CardHeader>
+          <CardContent>
+            <form className="flex flex-col gap-3" onSubmit={updatePrefix}>
+              <div className="space-y-1">
+                <Label htmlFor="tc-prefix">Prefix</Label>
+                <Input
+                  id="tc-prefix"
+                  value={prefix}
+                  onChange={(event) => setPrefix(event.target.value.toUpperCase())}
+                  maxLength={6}
+                  minLength={2}
+                  required
+                  aria-describedby="tc-prefix-help"
+                />
+                <p id="tc-prefix-help" className="text-xs text-muted-foreground">
+                  Letters/numbers only. Example ID: <code className="rounded bg-muted px-1">{previewIdValue(prefix)}</code>
+                </p>
+                {prefixError && <p className="text-xs text-destructive">{prefixError}</p>}
+              </div>
+              <div>
+                <Button type="submit" disabled={updatingPrefix} size="sm">
+                  {updatingPrefix ? "Saving…" : "Save prefix"}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+
         {/* ── API Keys ── */}
         <Card>
           <CardHeader className="pb-3">
