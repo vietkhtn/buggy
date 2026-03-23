@@ -13,7 +13,7 @@ export default async function TestsPage() {
 
   const project = await ensureProjectForUser(session.user.id);
 
-  const [testCases, activeManualRun] = await Promise.all([
+  const [testCases, activeManualRun, suites] = await Promise.all([
     db.testCase.findMany({
       where: { projectId: project.id },
       orderBy: { createdAt: "desc" },
@@ -37,6 +37,26 @@ export default async function TestsPage() {
         results: {
           select: { id: true, name: true, status: true },
           orderBy: { createdAt: "asc" },
+        },
+      },
+    }),
+    db.testSuite.findMany({
+      where: { projectId: project.id },
+      orderBy: { createdAt: "desc" },
+      include: {
+        cases: {
+          orderBy: { order: "asc" },
+          include: {
+            testCase: {
+              select: {
+                id: true,
+                title: true,
+                priority: true,
+                status: true,
+                module: { select: { name: true } },
+              },
+            },
+          },
         },
       },
     }),
@@ -77,6 +97,7 @@ export default async function TestsPage() {
         projectId={project.id}
         testCases={mappedTestCases}
         activeManualRun={mappedRun}
+        suites={suites}
       />
     </main>
   );

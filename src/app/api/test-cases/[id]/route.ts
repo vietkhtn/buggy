@@ -1,0 +1,131 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { auth } from "@/auth";
+import { db } from "@/lib/db";
+import { userHasProjectAccess } from "@/lib/projects";
+
+const stepSchema = z.object({
+  action: z.string().trim().min(1),
+  expectedResult: z.string().trim().min(1),
+});
+
+const updateTestCaseSchema = z.object({
+  title: z.string().trim().min(1).max(200).optional(),
+  description: z.string().max(10_000).optional().nullable(),
+  preconditions: z.string().max(10_000).optional().nullable(),
+  tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
+  moduleName: z.string().trim().min(1).max(120).optional().nullable(),
+  priority: z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW"]).optional(),
+  status: z.enum(["DRAFT", "ACTIVE", "DEPRECATED"]).optional(),
+  steps: z.array(stepSchema).min(1).optional(),
+});
+
+async function getTestCaseWithAccess(userId: string, testCaseId: string) {
+  const testCase = await db.testCase.findUnique({
+    where: { id: testCaseId },
+    include: { steps: { orderBy: { stepNumber: "asc" } }, module: true },
+  });
+
+  if (!testCase) return null;
+  if (!(await userHasProjectAccess(userId, testCase.projectId))) return null;
+  return testCase;
+}
+
+// ─── GET /api/test-cases/[id] ─────────────────────────────────────────────────
+
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+  const testCase = await getTestCaseWithAccess(session.user.id, id);
+  if (!testCase) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  return NextResponse.json({ testCase });
+}
+
+// ─── PUT /api/test-cases/[id] ─────────────────────────────────────────────────
+
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+
+  try {
+    const payload = updateTestCaseSchema.parse(await request.json());
+
+    const existing = await getTestCaseWithAccess(session.user.id, id);
+    if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    let moduleId = existing.moduleId;
+
+    if (payload.moduleName !== undefined) {
+      if (payload.moduleName === null || payload.moduleName === "") {
+        moduleId = null;
+      } else {
+        const mod = await db.module.upsert({
+          where: { projectId_name: { projectId: existing.projectId, name: payload.moduleName } },
+          update: {},
+          create: { projectId: existing.projectId, name: payload.moduleName },
+        });
+        moduleId = mod.id;
+      }
+    }
+
+    const updated = await db.testCase.update({
+      where: { id },
+      data: {
+        ...(payload.title !== undefined && { title: payload.title }),
+        ...(payload.description !== undefined && { description: payload.description }),
+        ...(payload.preconditions !== undefined && { preconditions: payload.preconditions }),
+        ...(payload.tags !== undefined && { tags: payload.tags }),
+        ...(payload.priority !== undefined && { priority: payload.priority }),
+        ...(payload.status !== undefined && { status: payload.status }),
+        moduleId,
+        ...(payload.steps !== undefined && {
+          steps: {
+            deleteMany: {},
+            create: payload.steps.map((s, i) => ({
+              stepNumber: i + 1,
+              action: s.action,
+              expectedResult: s.expectedResult,
+            })),
+          },
+        }),
+      },
+      include: { steps: { orderBy: { stepNumber: "asc" } }, module: true },
+    });
+
+    return NextResponse.json({ testCase: updated });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: "Invalid payload.", issues: error.issues }, { status: 400 });
+    }
+    console.error("[PUT /api/test-cases/[id]]", error);
+    return NextResponse.json({ error: "Unable to update test case." }, { status: 500 });
+  }
+}
+
+// ─── DELETE /api/test-cases/[id] ──────────────────────────────────────────────
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+  const testCase = await getTestCaseWithAccess(session.user.id, id);
+  if (!testCase) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  await db.testCase.delete({ where: { id } });
+  return NextResponse.json({ success: true });
+}
