@@ -1,6 +1,3 @@
-// Buggy - Test Management for QA Teams
-// Prisma Schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,25 +7,20 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================
-// Authentication Models (NextAuth compatible)
-// ============================================
-
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  emailVerified DateTime?
-  image         String?
-  password      String?   // For credential-based auth
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  accounts      Account[]
-  sessions      Session[]
-  projects      ProjectMember[]
-  apiKeys       ApiKey[]
-  testRuns      TestRun[]       @relation("CreatedBy")
+  id               String          @id @default(cuid())
+  name             String?
+  email            String          @unique
+  emailVerified    DateTime?
+  image            String?
+  password         String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  accounts         Account[]
+  apiKeys          ApiKey[]
+  projects         ProjectMember[]
+  sessions         Session[]
+  testRuns         TestRun[]       @relation("CreatedBy")
   suiteAssignments TestSuiteCase[] @relation("SuiteCaseAddedBy")
 
   @@map("users")
@@ -40,15 +32,14 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?
+  access_token      String?
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?
   session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
   @@map("accounts")
@@ -73,27 +64,22 @@ model VerificationToken {
   @@map("verification_tokens")
 }
 
-// ============================================
-// Core Application Models
-// ============================================
-
 model Project {
-  id          String   @id @default(cuid())
-  name        String
-  slug        String   @unique
-  description String?
-  testCasePrefix String   @default("TC")
-  testCaseCounter Int     @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  members       ProjectMember[]
-  testCases     TestCase[]
-  testRuns      TestRun[]
-  modules       Module[]
-  apiKeys       ApiKey[]
-  testSuites    TestSuite[]
-  defectReports DefectReport[]
+  id              String          @id @default(cuid())
+  name            String
+  slug            String          @unique
+  description     String?
+  testCasePrefix  String          @default("TC")
+  testCaseCounter Int             @default(0)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  apiKeys         ApiKey[]
+  defectReports   DefectReport[]
+  modules         Module[]
+  members         ProjectMember[]
+  testCases       TestCase[]
+  testRuns        TestRun[]
+  testSuites      TestSuite[]
 
   @@map("projects")
 }
@@ -104,27 +90,19 @@ model ProjectMember {
   userId    String
   role      ProjectRole @default(MEMBER)
   createdAt DateTime    @default(now())
-
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, userId])
   @@map("project_members")
 }
 
-enum ProjectRole {
-  ADMIN
-  MEMBER
-  VIEWER
-}
-
 model Module {
-  id        String   @id @default(cuid())
+  id        String     @id @default(cuid())
   projectId String
   name      String
-  color     String?  @default("#6366f1") // For heatmap visualization
-  createdAt DateTime @default(now())
-
+  color     String?    @default("#6366f1")
+  createdAt DateTime   @default(now())
   project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   testCases TestCase[]
 
@@ -132,34 +110,156 @@ model Module {
   @@map("modules")
 }
 
-// ============================================
-// Test Case Models (Manual Testing)
-// ============================================
-
 model TestCase {
-  id            String         @id @default(cuid())
+  id            String          @id @default(cuid())
   projectId     String
   moduleId      String?
   displayId     String
-  jiraKey       String?        @db.VarChar(32)
-  title         String         @db.VarChar(200)
-  description   String?        @db.Text
-  preconditions String?        @db.Text
-  priority      TestPriority   @default(MEDIUM)
-  status        TestCaseStatus @default(DRAFT)
-  tags          String[]       @default([])
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  jiraKey       String?         @db.VarChar(32)
+  title         String          @db.VarChar(200)
+  description   String?
+  preconditions String?
+  priority      TestPriority    @default(MEDIUM)
+  status        TestCaseStatus  @default(DRAFT)
+  tags          String[]        @default([])
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  module        Module?         @relation(fields: [moduleId], references: [id])
+  project       Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  results       TestResult[]
+  suiteItems    TestSuiteCase[]
 
-  project    Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  module     Module?          @relation(fields: [moduleId], references: [id], onDelete: SetNull)
-  results    TestResult[]
-  suiteItems TestSuiteCase[]
-
+  @@unique([projectId, displayId])
   @@index([projectId])
   @@index([moduleId])
-  @@unique([projectId, displayId])
   @@map("test_cases")
+}
+
+model TestRun {
+  id          String       @id @default(cuid())
+  projectId   String
+  createdById String?
+  name        String
+  source      TestSource
+  status      RunStatus    @default(IN_PROGRESS)
+  metadata    Json?
+  startedAt   DateTime     @default(now())
+  completedAt DateTime?
+  fileHash    String?
+  results     TestResult[]
+  createdBy   User?        @relation("CreatedBy", fields: [createdById], references: [id])
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([startedAt])
+  @@map("test_runs")
+}
+
+model TestResult {
+  id             String           @id @default(cuid())
+  runId          String
+  testCaseId     String?
+  name           String
+  suite          String?
+  status         ResultStatus
+  durationMs     Int?
+  failureMessage String?
+  stackTrace     String?
+  category       FailureCategory?
+  metadata       Json?
+  notes          String?
+  attachments    String[]         @default([])
+  createdAt      DateTime         @default(now())
+  run            TestRun          @relation(fields: [runId], references: [id], onDelete: Cascade)
+  testCase       TestCase?        @relation(fields: [testCaseId], references: [id])
+
+  @@index([runId])
+  @@index([testCaseId])
+  @@index([name])
+  @@map("test_results")
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  projectId  String
+  userId     String
+  name       String
+  keyHash    String    @unique
+  keyPrefix  String
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([keyHash])
+  @@map("api_keys")
+}
+
+model TestSuite {
+  id          String          @id @default(cuid())
+  projectId   String
+  name        String
+  description String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  cases       TestSuiteCase[]
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, name])
+  @@index([projectId])
+  @@map("test_suites")
+}
+
+model TestSuiteCase {
+  id         String    @id @default(cuid())
+  suiteId    String
+  testCaseId String
+  order      Int       @default(0)
+  addedById  String?
+  addedAt    DateTime  @default(now())
+  addedBy    User?     @relation("SuiteCaseAddedBy", fields: [addedById], references: [id])
+  suite      TestSuite @relation(fields: [suiteId], references: [id], onDelete: Cascade)
+  testCase   TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+
+  @@unique([suiteId, testCaseId])
+  @@map("test_suite_cases")
+}
+
+model DefectReport {
+  id                  String   @id @default(cuid())
+  projectId           String
+  reportedAt          DateTime @default(now())
+  requirementsCovered Int      @default(0)
+  totalRequirements   Int      @default(0)
+  testingBugsFound    Int      @default(0)
+  productionBugsFound Int      @default(0)
+  notes               String?
+  project             Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([reportedAt])
+  @@map("defect_reports")
+}
+
+model ExploratorySession {
+  id        String    @id @default(cuid())
+  projectId String
+  charter   String?
+  focus     String?
+  notes     String?
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+  tags      String[]  @default([])
+
+  @@index([projectId])
+  @@map("exploratory_sessions")
+}
+
+enum ProjectRole {
+  ADMIN
+  MEMBER
+  VIEWER
 }
 
 enum TestPriority {
@@ -175,31 +275,6 @@ enum TestCaseStatus {
   DEPRECATED
 }
 
-// ============================================
-// Test Run & Results Models
-// ============================================
-
-model TestRun {
-  id          String       @id @default(cuid())
-  projectId   String
-  createdById String?
-  name        String
-  source      TestSource
-  status      RunStatus    @default(IN_PROGRESS)
-  metadata    Json?        // For storing browser, OS, CI info, etc.
-  startedAt   DateTime     @default(now())
-  completedAt DateTime?
-  fileHash    String?      // For duplicate detection
-
-  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy User?        @relation("CreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  results   TestResult[]
-
-  @@index([projectId])
-  @@index([startedAt])
-  @@map("test_runs")
-}
-
 enum TestSource {
   MANUAL
   AUTOMATED
@@ -209,31 +284,6 @@ enum RunStatus {
   IN_PROGRESS
   COMPLETED
   ABORTED
-}
-
-model TestResult {
-  id             String         @id @default(cuid())
-  runId          String
-  testCaseId     String?        // Null for automated tests not linked to manual cases
-  name           String
-  suite          String?
-  status         ResultStatus
-  durationMs     Int?
-  failureMessage String?        @db.Text
-  stackTrace     String?        @db.Text
-  category       FailureCategory?
-  metadata       Json?          // For storing additional data
-  notes          String?        @db.Text
-  attachments    String[]       @default([])
-  createdAt      DateTime       @default(now())
-
-  run      TestRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
-  testCase TestCase? @relation(fields: [testCaseId], references: [id], onDelete: SetNull)
-
-  @@index([runId])
-  @@index([testCaseId])
-  @@index([name])
-  @@map("test_results")
 }
 
 enum ResultStatus {
@@ -252,101 +302,4 @@ enum FailureCategory {
   NETWORK
   DATABASE
   UNKNOWN
-}
-
-// ============================================
-// API Keys for CI/CD Integration
-// ============================================
-
-model ApiKey {
-  id         String    @id @default(cuid())
-  projectId  String
-  userId     String
-  name       String
-  keyHash    String    @unique
-  keyPrefix  String    // First 8 chars for identification
-  lastUsedAt DateTime?
-  expiresAt  DateTime?
-  createdAt  DateTime  @default(now())
-
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([keyHash])
-  @@map("api_keys")
-}
-
-// ============================================
-// Test Suites
-// ============================================
-
-model TestSuite {
-  id          String   @id @default(cuid())
-  projectId   String
-  name        String
-  description String?  @db.Text
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  cases   TestSuiteCase[]
-
-  @@unique([projectId, name])
-  @@index([projectId])
-  @@map("test_suites")
-}
-
-model TestSuiteCase {
-  id         String @id @default(cuid())
-  suiteId    String
-  testCaseId String
-  order      Int    @default(0)
-  addedById  String?
-  addedAt    DateTime @default(now())
-
-  suite    TestSuite @relation(fields: [suiteId], references: [id], onDelete: Cascade)
-  testCase TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
-  addedBy  User?     @relation("SuiteCaseAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
-
-  @@unique([suiteId, testCaseId])
-  @@map("test_suite_cases")
-}
-
-// ============================================
-// Metrics / Defect Reports
-// ============================================
-
-model DefectReport {
-  id                  String   @id @default(cuid())
-  projectId           String
-  reportedAt          DateTime @default(now())
-  requirementsCovered Int      @default(0)
-  totalRequirements   Int      @default(0)
-  testingBugsFound    Int      @default(0)
-  productionBugsFound Int      @default(0)
-  notes               String?  @db.Text
-
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@index([projectId])
-  @@index([reportedAt])
-  @@map("defect_reports")
-}
-
-// ============================================
-// Exploratory Testing (Feature Flag: ENABLE_SESSION_TESTING)
-// ============================================
-
-model ExploratorySession {
-  id        String    @id @default(cuid())
-  projectId String
-  charter   String?
-  focus     String?
-  notes     String?   @db.Text
-  startedAt DateTime  @default(now())
-  endedAt   DateTime?
-  tags      String[]  @default([])
-
-  @@index([projectId])
-  @@map("exploratory_sessions")
 }
