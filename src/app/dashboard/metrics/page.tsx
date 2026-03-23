@@ -3,6 +3,8 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { ensureProjectForUser } from "@/lib/projects";
 import { MetricsPanel } from "@/components/metrics-panel";
+import { calculateFlakiness, TestHistoryItem } from "@/lib/flaky-detection";
+import { ResultStatus } from "@prisma/client";
 
 export default async function MetricsPage() {
   const session = await auth();
@@ -78,6 +80,41 @@ export default async function MetricsPage() {
     testingBugs: r.testingBugsFound,
   }));
 
+  // ── Flakiness ────────────────────────────────────────────────────────────────
+  const automatedRuns = await db.testRun.findMany({
+    where: { projectId: project.id, source: "AUTOMATED" },
+    orderBy: { startedAt: "desc" },
+    take: 20,
+    include: { results: { select: { name: true, status: true } } },
+  });
+
+  const testHistories = new Map<string, TestHistoryItem[]>();
+  for (const run of automatedRuns) {
+    for (const result of run.results) {
+      const history = testHistories.get(result.name) ?? [];
+      history.push({ status: result.status as ResultStatus });
+      testHistories.set(result.name, history);
+    }
+  }
+
+  const allFlaky = [...testHistories.entries()]
+    .map(([name, history]) => {
+      const flakiness = calculateFlakiness(history);
+      return {
+        name,
+        score: Math.round(flakiness.score * 100),
+        failureRate: Math.round(flakiness.failureRate * 100),
+        isFlaky: flakiness.isFlaky,
+      };
+    })
+    .filter((f) => f.isFlaky)
+    .sort((a, b) => b.score - a.score);
+
+  const flakinessIndex =
+    allFlaky.length > 0
+      ? Math.round((allFlaky.reduce((sum, f) => sum + f.score, 0) / allFlaky.length) * 10) / 10
+      : 0;
+
   // ── Total test case count ─────────────────────────────────────────────────────
   const testCaseCount = await db.testCase.count({ where: { projectId: project.id } });
 
@@ -93,6 +130,8 @@ export default async function MetricsPage() {
           defectLeakage,
           defectDensity,
           avgTimeToConfidenceMs,
+          flakinessIndex,
+          topFlakyTests: allFlaky.slice(0, 5),
         }}
         history={history}
         latestReport={

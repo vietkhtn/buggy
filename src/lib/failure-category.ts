@@ -1,20 +1,59 @@
-type FailureCategory = "UI" | "API" | "TIMEOUT" | "ASSERTION" | "NETWORK" | "DATABASE" | "UNKNOWN";
-type ResultStatus = "PASSED" | "FAILED" | "SKIPPED" | "ERROR" | "BLOCKED";
+import { FailureCategory, ResultStatus } from "@prisma/client";
+
+/**
+ * Categorizes a failure based on the error message and stack trace.
+ * Uses heuristics to identify the most likely category.
+ */
+interface CategoryPattern {
+  category: FailureCategory;
+  patterns: (string | RegExp)[];
+}
+
+const CATEGORY_PATTERNS: CategoryPattern[] = [
+  {
+    category: "ASSERTION",
+    patterns: ["expected", "to equal", "to be", "assertion", /expect\(.*\)\.to/],
+  },
+  {
+    category: "TIMEOUT",
+    patterns: ["timed out", "timeout"],
+  },
+  {
+    category: "NETWORK",
+    patterns: ["econnrefused", "network", "fetch failed", "connection refused", "dns"],
+  },
+  {
+    category: "API",
+    patterns: ["status code", "api", "request failed", "response status", "http"],
+  },
+  {
+    category: "DATABASE",
+    patterns: ["prisma", "database", "unique constraint", "sql", "postgres", "query failed", "db"],
+  },
+  {
+    category: "UI",
+    patterns: ["locator", "playwright", "element", "click", "visible", "selector", "page closed", "dom", "ui"],
+  },
+];
 
 export function categorizeFailure(
   message: string | null | undefined,
   stackTrace: string | null | undefined
 ): FailureCategory {
-  const text = `${message ?? ""} ${stackTrace ?? ""}`.toLowerCase();
+  const combined = `${message ?? ""} ${stackTrace ?? ""}`.toLowerCase();
 
-  if (!text.trim()) return "UNKNOWN";
-  if (text.includes("timeout") || text.includes("timed out")) return "TIMEOUT";
-  if (text.includes("assert") || text.includes("expect(")) return "ASSERTION";
-  if (text.includes("fetch") || text.includes("api") || text.includes("http")) return "API";
-  if (text.includes("network") || text.includes("econn") || text.includes("dns")) return "NETWORK";
-  if (text.includes("sql") || text.includes("database") || text.includes("db")) return "DATABASE";
-  if (text.includes("element") || text.includes("selector") || text.includes("dom") || text.includes("ui")) {
-    return "UI";
+  if (!combined.trim()) return "UNKNOWN";
+
+  for (const { category, patterns } of CATEGORY_PATTERNS) {
+    for (const pattern of patterns) {
+      if (typeof pattern === "string") {
+        if (combined.includes(pattern.toLowerCase())) {
+          return category;
+        }
+      } else if (pattern.test(combined)) {
+        return category;
+      }
+    }
   }
 
   return "UNKNOWN";

@@ -42,6 +42,8 @@ type Metrics = {
   defectLeakage: number | null;
   defectDensity: DefectDensityItem[];
   avgTimeToConfidenceMs: number | null;
+  flakinessIndex: number | null;
+  topFlakyTests: { name: string; score: number; failureRate: number }[];
 };
 
 type Props = {
@@ -62,6 +64,7 @@ const PDF_METRIC_OPTIONS = [
   { key: "defectLeakage", label: "Defect Leakage" },
   { key: "defectDensity", label: "Defect Density by Module" },
   { key: "timeToConfidence", label: "Time to Confidence" },
+  { key: "flakiness", label: "Flakiness Index" },
 ] as const;
 
 type PdfMetricKey = (typeof PDF_METRIC_OPTIONS)[number]["key"];
@@ -233,6 +236,9 @@ export function MetricsPanel({
       }
       if (include("timeToConfidence")) {
         metricRows.push(["Time to Confidence", fmtMs(metrics.avgTimeToConfidenceMs), "Avg time from run start to completion"]);
+      }
+      if (include("flakiness")) {
+        metricRows.push(["Flakiness Index", metrics.flakinessIndex !== null ? String(metrics.flakinessIndex) : "—", "Avg instability score for flaky tests"]);
       }
 
       if (metricRows.length > 0) {
@@ -504,32 +510,66 @@ export function MetricsPanel({
           description="Test cases in this project."
           highlight={null}
         />
+        <MetricCard
+          title="Flakiness Index"
+          value={metrics.flakinessIndex !== null ? String(metrics.flakinessIndex) : "—"}
+          description="Average instability score of flaky tests. Target: < 5."
+          highlight={metrics.flakinessIndex === null ? null : metrics.flakinessIndex < 5 ? "good" : metrics.flakinessIndex < 15 ? "warn" : "bad"}
+        />
       </div>
 
       {/* ── Defect density table ── */}
-      {metrics.defectDensity.length > 0 && (
-        <div className="mb-8">
-          <h2 className="text-base font-semibold mb-3">Defect Density by Module</h2>
-          <div className="rounded-xl border border-border overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Module / Suite</th>
-                  <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Failures</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border bg-card">
-                {metrics.defectDensity.map((d) => (
-                  <tr key={d.module} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-3">{d.module}</td>
-                    <td className="px-4 py-3 text-right font-semibold tabular-nums">{d.count}</td>
+      <div className="grid gap-8 lg:grid-cols-2 mb-8">
+        {metrics.defectDensity.length > 0 && (
+          <div>
+            <h2 className="text-base font-semibold mb-3">Defect Density by Module</h2>
+            <div className="rounded-xl border border-border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40">
+                    <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Module / Suite</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Failures</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-border bg-card">
+                  {metrics.defectDensity.map((d) => (
+                    <tr key={d.module} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-3">{d.module}</td>
+                      <td className="px-4 py-3 text-right font-semibold tabular-nums">{d.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {metrics.topFlakyTests.length > 0 && (
+          <div>
+            <h2 className="text-base font-semibold mb-3">Top Flaky Tests</h2>
+            <div className="rounded-xl border border-border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40">
+                    <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Test Name</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Instability</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Fail %</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border bg-card">
+                  {metrics.topFlakyTests.map((t) => (
+                    <tr key={t.name} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-3 truncate max-w-[200px]">{t.name}</td>
+                      <td className="px-4 py-3 text-right font-semibold tabular-nums text-[var(--warning)]">{t.score}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{t.failureRate}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* ── Historical trend ── */}
       {history.length > 1 && (

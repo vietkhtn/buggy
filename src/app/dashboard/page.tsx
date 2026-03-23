@@ -3,6 +3,8 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { ensureProjectForUser } from "@/lib/projects";
+import { calculateFlakiness, TestHistoryItem } from "@/lib/flaky-detection";
+import { ResultStatus } from "@prisma/client";
 
 function percent(numerator: number, denominator: number) {
   if (!denominator) return 0;
@@ -27,7 +29,7 @@ export default async function DashboardPage() {
 
   const project = await ensureProjectForUser(session.user.id);
 
-  const [recentRuns, countsByStatus, flakyCandidates, testCaseCount] = await Promise.all([
+  const [recentRuns, countsByStatus, testCaseCount] = await Promise.all([
     db.testRun.findMany({
       where: { projectId: project.id },
       orderBy: { startedAt: "desc" },
@@ -41,12 +43,6 @@ export default async function DashboardPage() {
       by: ["status"],
       where: { run: { projectId: project.id } },
       _count: { status: true },
-    }),
-    db.testRun.findMany({
-      where: { projectId: project.id, source: "AUTOMATED" },
-      orderBy: { startedAt: "desc" },
-      take: 5,
-      include: { results: { select: { name: true, status: true } } },
     }),
     db.testCase.count({ where: { projectId: project.id } }),
   ]);
@@ -67,25 +63,32 @@ export default async function DashboardPage() {
 
   const passRate = percent(counts.passed, counts.total);
 
-  const latestFiveMap = new Map<string, { passed: number; failed: number; total: number }>();
-  for (const run of flakyCandidates as Array<{
-    results: Array<{ name: string; status: string }>;
-  }>) {
+  const latestRuns = await db.testRun.findMany({
+    where: { projectId: project.id, source: "AUTOMATED" },
+    orderBy: { startedAt: "desc" },
+    take: 20,
+    include: { results: { select: { name: true, status: true } } },
+  });
+
+  const testHistories = new Map<string, TestHistoryItem[]>();
+  for (const run of latestRuns) {
     for (const result of run.results) {
-      const current = latestFiveMap.get(result.name) ?? { passed: 0, failed: 0, total: 0 };
-      current.total += 1;
-      if (result.status === "PASSED") current.passed += 1;
-      if (result.status === "FAILED" || result.status === "ERROR") current.failed += 1;
-      latestFiveMap.set(result.name, current);
+      const history = testHistories.get(result.name) ?? [];
+      history.push({ status: result.status as ResultStatus });
+      testHistories.set(result.name, history);
     }
   }
 
-  const flakyTests = [...latestFiveMap.entries()]
-    .map(([name, stats]) => ({
-      name,
-      score: stats.total > 0 ? Math.round((stats.failed / stats.total) * 100) : 0,
-      isFlaky: stats.passed > 0 && stats.failed > 0,
-    }))
+  const flakyTests = [...testHistories.entries()]
+    .map(([name, history]) => {
+      const flakiness = calculateFlakiness(history);
+      return {
+        name,
+        score: Math.round(flakiness.score * 100),
+        failureRate: Math.round(flakiness.failureRate * 100),
+        isFlaky: flakiness.isFlaky,
+      };
+    })
     .filter((item) => item.isFlaky)
     .sort((a, b) => b.score - a.score)
     .slice(0, 8);

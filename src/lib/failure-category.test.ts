@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { categorizeFailure } from "./failure-categorization";
+import { categorizeFailure } from "./failure-category";
 import { FailureCategory } from "@prisma/client";
 
 describe("categorizeFailure", () => {
