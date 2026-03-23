@@ -1,0 +1,301 @@
+// Buggy - Test Management for QA Teams
+// Prisma Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// Authentication Models (NextAuth compatible)
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?   // For credential-based auth
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  projects      ProjectMember[]
+  apiKeys       ApiKey[]
+  testRuns      TestRun[]       @relation("CreatedBy")
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ============================================
+// Core Application Models
+// ============================================
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members   ProjectMember[]
+  testCases TestCase[]
+  testRuns  TestRun[]
+  modules   Module[]
+  apiKeys   ApiKey[]
+
+  @@map("projects")
+}
+
+model ProjectMember {
+  id        String      @id @default(cuid())
+  projectId String
+  userId    String
+  role      ProjectRole @default(MEMBER)
+  createdAt DateTime    @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@map("project_members")
+}
+
+enum ProjectRole {
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+model Module {
+  id        String   @id @default(cuid())
+  projectId String
+  name      String
+  color     String?  @default("#6366f1") // For heatmap visualization
+  createdAt DateTime @default(now())
+
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  testCases TestCase[]
+
+  @@unique([projectId, name])
+  @@map("modules")
+}
+
+// ============================================
+// Test Case Models (Manual Testing)
+// ============================================
+
+model TestCase {
+  id            String         @id @default(cuid())
+  projectId     String
+  moduleId      String?
+  title         String         @db.VarChar(200)
+  description   String?        @db.Text
+  preconditions String?        @db.Text
+  priority      TestPriority   @default(MEDIUM)
+  status        TestCaseStatus @default(DRAFT)
+  tags          String[]       @default([])
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  module  Module?     @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  steps   TestStep[]
+  results TestResult[]
+
+  @@index([projectId])
+  @@index([moduleId])
+  @@map("test_cases")
+}
+
+enum TestPriority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum TestCaseStatus {
+  DRAFT
+  ACTIVE
+  DEPRECATED
+}
+
+model TestStep {
+  id             String @id @default(cuid())
+  testCaseId     String
+  stepNumber     Int
+  action         String @db.Text
+  expectedResult String @db.Text
+
+  testCase TestCase @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+
+  @@unique([testCaseId, stepNumber])
+  @@map("test_steps")
+}
+
+// ============================================
+// Test Run & Results Models
+// ============================================
+
+model TestRun {
+  id          String       @id @default(cuid())
+  projectId   String
+  createdById String?
+  name        String
+  source      TestSource
+  status      RunStatus    @default(IN_PROGRESS)
+  metadata    Json?        // For storing browser, OS, CI info, etc.
+  startedAt   DateTime     @default(now())
+  completedAt DateTime?
+  fileHash    String?      // For duplicate detection
+
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User?        @relation("CreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  results   TestResult[]
+
+  @@index([projectId])
+  @@index([startedAt])
+  @@map("test_runs")
+}
+
+enum TestSource {
+  MANUAL
+  AUTOMATED
+}
+
+enum RunStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABORTED
+}
+
+model TestResult {
+  id             String         @id @default(cuid())
+  runId          String
+  testCaseId     String?        // Null for automated tests not linked to manual cases
+  name           String
+  suite          String?
+  status         ResultStatus
+  durationMs     Int?
+  failureMessage String?        @db.Text
+  stackTrace     String?        @db.Text
+  category       FailureCategory?
+  metadata       Json?          // For storing additional data
+  stepsResults   Json?          // For manual test step-by-step results
+  notes          String?        @db.Text
+  attachments    String[]       @default([])
+  createdAt      DateTime       @default(now())
+
+  run      TestRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  testCase TestCase? @relation(fields: [testCaseId], references: [id], onDelete: SetNull)
+
+  @@index([runId])
+  @@index([testCaseId])
+  @@index([name])
+  @@map("test_results")
+}
+
+enum ResultStatus {
+  PASSED
+  FAILED
+  SKIPPED
+  ERROR
+  BLOCKED
+}
+
+enum FailureCategory {
+  UI
+  API
+  TIMEOUT
+  ASSERTION
+  NETWORK
+  DATABASE
+  UNKNOWN
+}
+
+// ============================================
+// API Keys for CI/CD Integration
+// ============================================
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  projectId  String
+  userId     String
+  name       String
+  keyHash    String    @unique
+  keyPrefix  String    // First 8 chars for identification
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([keyHash])
+  @@map("api_keys")
+}
+
+// ============================================
+// Exploratory Testing (Feature Flag: ENABLE_SESSION_TESTING)
+// ============================================
+
+model ExploratorySession {
+  id        String    @id @default(cuid())
+  projectId String
+  charter   String?
+  focus     String?
+  notes     String?   @db.Text
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+  tags      String[]  @default([])
+
+  @@index([projectId])
+  @@map("exploratory_sessions")
+}
