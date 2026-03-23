@@ -22,6 +22,8 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
   const requestedProjectId = formData.get("projectId") as string | null;
+  const mappingRaw = formData.get("mapping") as string | null;
+  const mapping = mappingRaw ? JSON.parse(mappingRaw) as Record<string, string> : null;
 
   if (!file) return NextResponse.json({ error: "No file provided." }, { status: 400 });
 
@@ -42,11 +44,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "File contains no data rows." }, { status: 400 });
   }
 
-  // Normalise header keys to lowercase without spaces
+  // Normalise rows using mapping if provided, otherwise auto-detect
   const normalised = rows.map((row) => {
     const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(row)) {
-      out[k.toLowerCase().replace(/\s+/g, "")] = String(v ?? "").trim();
+    if (mapping) {
+      // Use explicit mapping from user
+      for (const [targetField, csvHeader] of Object.entries(mapping)) {
+        if (csvHeader) {
+          out[targetField] = String(row[csvHeader] ?? "").trim();
+        }
+      }
+    } else {
+      // Auto-detect by normalising header names
+      for (const [k, v] of Object.entries(row)) {
+        out[k.toLowerCase().replace(/\s+/g, "")] = String(v ?? "").trim();
+      }
     }
     return out;
   });
@@ -91,7 +103,7 @@ export async function POST(request: Request) {
     if (!raw) return null;
     const upper = raw.toUpperCase();
     if (!upper) return null;
-    return /^[A-Z][A-Z0-9]+-\d+$/.test(upper) ? upper : null;
+    return /^[A-Z][A-Z0-9]*-[0-9]+$/.test(upper) ? upper : null;
   }
 
   const created: string[] = [];

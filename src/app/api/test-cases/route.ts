@@ -12,7 +12,7 @@ const jiraKeySchema = z
   .trim()
   .min(1)
   .max(32)
-  .regex(/^[A-Z][A-Z0-9]+-\d+$/, { message: "Invalid Jira issue key." })
+  .regex(/^[A-Z][A-Z0-9]*-[0-9]+$/, { message: "Invalid Jira issue key." })
   .transform((value) => value.toUpperCase());
 
 const createTestCaseSchema = z.object({

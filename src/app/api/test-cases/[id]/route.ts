@@ -9,7 +9,7 @@ const jiraKeySchema = z
   .trim()
   .min(1)
   .max(32)
-  .regex(/^[A-Z][A-Z0-9]+-\d+$/)
+  .regex(/^[A-Z][A-Z0-9]*-[0-9]+$/)
   .transform((value) => value.toUpperCase());
 
 const updateTestCaseSchema = z.object({

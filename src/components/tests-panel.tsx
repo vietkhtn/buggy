@@ -2,12 +2,20 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -162,7 +170,7 @@ function CaseFormFields({
             type="text"
             placeholder="ABC-1234"
             defaultValue={defaults?.jiraKey ?? ""}
-            pattern="[A-Za-z][A-Za-z0-9]+-\\d+"
+            pattern="[A-Za-z][A-Za-z0-9]*-[0-9]+"
             title="Format: PROJECT-123"
           />
         </div>
@@ -270,6 +278,9 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
   // ── Import ───────────────────────────────────────────────────────────────────
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importStep, setImportStep] = useState<"select" | "map">("select");
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── All cases search ─────────────────────────────────────────────────────────
@@ -458,10 +469,57 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
 
   // ─── Import ──────────────────────────────────────────────────────────────────
 
+  async function handleFileSelect() {
+    const file = fileInputRef.current?.files?.[0];
+    if (!file) return;
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { header: 1, defval: "" });
+
+      if (rows.length > 0) {
+        const headers = (rows[0] as unknown[]).map(h => String(h ?? "").trim()).filter(Boolean);
+        setCsvHeaders(headers);
+
+        // Initial smart mapping
+        const initialMapping: Record<string, string> = {};
+        const targets = ["title", "description", "module", "priority", "status", "tags", "preconditions", "jira"];
+        
+        targets.forEach(t => {
+          const match = headers.find(h => 
+            h.toLowerCase().replace(/\s+/g, "").includes(t.toLowerCase()) ||
+            t.toLowerCase().includes(h.toLowerCase().replace(/\s+/g, ""))
+          );
+          if (match) initialMapping[t] = match;
+        });
+        
+        setColumnMapping(initialMapping);
+        setImportStep("map");
+      } else {
+        toast.error("File seems empty.");
+      }
+    } catch {
+      toast.error("Unable to read file headers.");
+    }
+  }
+
   async function handleImport(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const file = fileInputRef.current?.files?.[0];
     if (!file) { toast.error("Please select a file."); return; }
+    
+    if (importStep === "select") {
+      await handleFileSelect();
+      return;
+    }
+
+    if (!columnMapping.title) {
+      toast.error("You must map the 'title' column.");
+      return;
+    }
+
     setImporting(true);
     const toastId = toast.loading("Importing…");
 
@@ -469,6 +527,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
       const formData = new FormData();
       formData.append("file", file);
       formData.append("projectId", projectId);
+      formData.append("mapping", JSON.stringify(columnMapping));
 
       const response = await fetch("/api/test-cases/import", { method: "POST", body: formData });
       const body = await response.json() as { created?: number; errors?: { row: number; error: string }[] };
@@ -484,6 +543,9 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
         { id: toastId }
       );
       setShowImportDialog(false);
+      setImportStep("select");
+      setCsvHeaders([]);
+      setColumnMapping({});
       router.refresh();
     } catch {
       toast.error("Network error during import.", { id: toastId });
@@ -799,28 +861,78 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
       </Dialog>
 
       {/* ── Import dialog ── */}
-      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-        <DialogContent className="max-w-lg">
+      <Dialog open={showImportDialog} onOpenChange={(open) => {
+        setShowImportDialog(open);
+        if (!open) { setImportStep("select"); setCsvHeaders([]); setColumnMapping({}); }
+      }}>
+        <DialogContent className={importStep === "map" ? "max-w-2xl" : "max-w-lg"}>
           <DialogHeader>
             <DialogTitle>Import test cases</DialogTitle>
             <DialogDescription>
-              Upload an Excel (.xlsx, .xls) or CSV file. Required column: <strong>title</strong>. Optional:
-              description, module, priority, status, tags, preconditions, <em>jira</em>.
+              {importStep === "select" 
+                ? "Upload an Excel (.xlsx, .xls) or CSV file. You will be able to map columns in the next step."
+                : "Map your file columns to the internal test case fields."}
             </DialogDescription>
           </DialogHeader>
+          
           <form className="space-y-4" onSubmit={handleImport}>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:bg-muted file:text-foreground hover:file:bg-muted/80"
-            />
-            <div className="flex justify-end gap-3">
+            {importStep === "select" ? (
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleFileSelect}
+                className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:bg-muted file:text-foreground hover:file:bg-muted/80"
+              />
+            ) : (
+              <div className="grid grid-cols-2 gap-x-6 gap-y-4 py-2">
+                {[
+                  { id: "title", label: "Title *", required: true },
+                  { id: "description", label: "Description" },
+                  { id: "module", label: "Module" },
+                  { id: "priority", label: "Priority" },
+                  { id: "status", label: "Status" },
+                  { id: "tags", label: "Tags" },
+                  { id: "preconditions", label: "Preconditions" },
+                  { id: "jira", label: "Jira Reference" },
+                ].map((field) => (
+                  <div key={field.id} className="space-y-1.5">
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      {field.label}
+                    </Label>
+                    <Select
+                      value={columnMapping[field.id] || "none"}
+                      onValueChange={(val) => setColumnMapping(prev => ({ 
+                        ...prev, 
+                        [field.id]: val === "none" ? "" : val 
+                      }))}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Select column..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">-- Skip --</SelectItem>
+                        {csvHeaders.map(h => (
+                          <SelectItem key={h} value={h}>{h}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            <div className="flex justify-end gap-3 pt-2">
               <Button type="button" variant="outline" onClick={() => setShowImportDialog(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={importing}>
-                {importing ? "Importing…" : "Import"}
+              {importStep === "map" && (
+                <Button type="button" variant="ghost" onClick={() => setImportStep("select")}>
+                  Back
+                </Button>
+              )}
+              <Button type="submit" disabled={importing || (importStep === "select" && !fileInputRef.current?.files?.length)}>
+                {importing ? "Importing…" : importStep === "select" ? "Next" : "Import"}
               </Button>
             </div>
           </form>
