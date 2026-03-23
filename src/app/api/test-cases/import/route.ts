@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { ensureProjectForUser, userHasProjectAccess } from "@/lib/projects";
 import { reserveTestCaseDisplayIds } from "@/lib/test-case-ids";
 import * as XLSX from "xlsx";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
 // ─── POST /api/test-cases/import ──────────────────────────────────────────────
 // Accepts multipart/form-data with:
@@ -71,7 +72,10 @@ export async function POST(request: Request) {
 
   // Module cache to avoid N+1 upserts
   const moduleCache = new Map<string, string>();
-  async function getModuleId(tx: typeof db, name: string): Promise<string | null> {
+  async function getModuleId(
+    tx: Prisma.TransactionClient | PrismaClient,
+    name: string,
+  ): Promise<string | null> {
     if (!name) return null;
     if (moduleCache.has(name)) return moduleCache.get(name)!;
     const mod = await tx.module.upsert({
