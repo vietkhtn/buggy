@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { DashboardActions } from "@/components/dashboard-actions";
 import { LogoutButton } from "@/components/logout-button";
+import { CopyProjectId } from "@/components/copy-project-id";
 import { db } from "@/lib/db";
 import { ensureProjectForUser } from "@/lib/projects";
 
@@ -33,13 +33,19 @@ export default async function DashboardPage() {
 
   // Fetch up to 10 000 test cases so the client-side search in DashboardActions
   // can filter the full set without additional round-trips.
-  const [testCases, recentRuns, countsByStatus, flakyCandidates, activeManualRun] =
+  const [testCases, recentRuns, countsByStatus, flakyCandidates, apiKeys, activeManualRun] =
     await Promise.all([
       db.testCase.findMany({
         where: { projectId: project.id },
         orderBy: { createdAt: "desc" },
         take: 10_000,
-        select: { id: true, title: true, module: { select: { name: true } }, status: true },
+        select: {
+          id: true,
+          title: true,
+          priority: true,
+          module: { select: { name: true } },
+          status: true,
+        },
       }),
       db.testRun.findMany({
         where: { projectId: project.id },
@@ -60,6 +66,11 @@ export default async function DashboardPage() {
         orderBy: { startedAt: "desc" },
         take: 5,
         include: { results: { select: { name: true, status: true } } },
+      }),
+      db.apiKey.findMany({
+        where: { projectId: project.id },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, name: true, keyPrefix: true, createdAt: true, lastUsedAt: true },
       }),
       db.testRun.findFirst({
         where: {
@@ -128,9 +139,7 @@ export default async function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/" className="rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted transition-colors">
-            Home
-          </Link>
+          <CopyProjectId projectId={project.id} />
           <LogoutButton />
         </div>
       </header>
@@ -157,6 +166,24 @@ export default async function DashboardPage() {
         </div>
       </section>
 
+      {/* ── Empty state for first-time users ── */}
+      {counts.total === 0 && testCases.length === 0 && (
+        <section className="rounded-xl border border-dashed border-border bg-muted/30 p-8 text-center">
+          <p className="text-sm font-medium">No test results yet</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Upload a JUnit run or create a manual test case to get started.
+          </p>
+          <div className="mt-4 flex justify-center gap-3">
+            <a href="#upload-junit" className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90">
+              Upload JUnit run
+            </a>
+            <a href="#create-test-case" className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-muted">
+              Create test case
+            </a>
+          </div>
+        </section>
+      )}
+
       {/* ── Actions ── */}
       <section>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-[0.14em] text-muted-foreground">
@@ -164,10 +191,28 @@ export default async function DashboardPage() {
         </h2>
         <DashboardActions
           projectId={project.id}
-          testCases={(testCases as Array<{ id: string; title: string }>).map((tc) => ({
+          testCases={(
+            testCases as Array<{
+              id: string;
+              title: string;
+              priority: string;
+              module: { name: string } | null;
+            }>
+          ).map((tc) => ({
             id: tc.id,
             title: tc.title,
+            priority: tc.priority,
+            module: tc.module?.name ?? null,
           }))}
+          apiKeys={(
+            apiKeys as Array<{
+              id: string;
+              name: string;
+              keyPrefix: string;
+              createdAt: Date;
+              lastUsedAt: Date | null;
+            }>
+          )}
           activeManualRun={
             activeManualRun
               ? {

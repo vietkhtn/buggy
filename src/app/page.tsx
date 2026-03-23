@@ -37,6 +37,24 @@ export default async function Home() {
             Sign in
           </Link>
         </div>
+
+        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { icon: "📥", title: "JUnit import", description: "Upload XML reports from any CI pipeline in seconds." },
+            { icon: "✅", title: "Manual test runs", description: "Execute and track manual test cases with PASS / FAIL / BLOCKED statuses." },
+            { icon: "🔥", title: "Flaky test detection", description: "Automatically surface tests that pass and fail across recent runs." },
+            { icon: "🔑", title: "CI/CD API key", description: "Push results directly from GitHub Actions, GitLab CI, or Jenkins." },
+          ].map((feature) => (
+            <div
+              key={feature.title}
+              className="rounded-xl border border-white/10 bg-white/5 p-5 backdrop-blur-sm"
+            >
+              <p className="text-2xl">{feature.icon}</p>
+              <p className="mt-2 text-sm font-semibold text-slate-100">{feature.title}</p>
+              <p className="mt-1 text-xs text-slate-400">{feature.description}</p>
+            </div>
+          ))}
+        </div>
       </main>
     </div>
   );
