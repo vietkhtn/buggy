@@ -1,8 +1,6 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { auth } from "@/auth";
-import { DashboardActions } from "@/components/dashboard-actions";
-import { LogoutButton } from "@/components/logout-button";
-import { CopyProjectId } from "@/components/copy-project-id";
 import { db } from "@/lib/db";
 import { ensureProjectForUser } from "@/lib/projects";
 
@@ -11,8 +9,6 @@ function percent(numerator: number, denominator: number) {
   return Math.round((numerator / denominator) * 100);
 }
 
-// Semantic colour for each metric card:
-// pass-rate → green, failed → red, skipped+error → amber, others → neutral
 type MetricVariant = "default" | "success" | "danger" | "warning";
 
 const VARIANT_CLASSES: Record<MetricVariant, string> = {
@@ -31,62 +27,29 @@ export default async function DashboardPage() {
 
   const project = await ensureProjectForUser(session.user.id);
 
-  // Fetch up to 10 000 test cases so the client-side search in DashboardActions
-  // can filter the full set without additional round-trips.
-  const [testCases, recentRuns, countsByStatus, flakyCandidates, apiKeys, activeManualRun] =
-    await Promise.all([
-      db.testCase.findMany({
-        where: { projectId: project.id },
-        orderBy: { createdAt: "desc" },
-        take: 10_000,
-        select: {
-          id: true,
-          title: true,
-          priority: true,
-          module: { select: { name: true } },
-          status: true,
-        },
-      }),
-      db.testRun.findMany({
-        where: { projectId: project.id },
-        orderBy: { startedAt: "desc" },
-        take: 10,
-        include: {
-          _count: { select: { results: true } },
-          results: { select: { status: true } },
-        },
-      }),
-      db.testResult.groupBy({
-        by: ["status"],
-        where: { run: { projectId: project.id } },
-        _count: { status: true },
-      }),
-      db.testRun.findMany({
-        where: { projectId: project.id, source: "AUTOMATED" },
-        orderBy: { startedAt: "desc" },
-        take: 5,
-        include: { results: { select: { name: true, status: true } } },
-      }),
-      db.apiKey.findMany({
-        where: { projectId: project.id },
-        orderBy: { createdAt: "desc" },
-        select: { id: true, name: true, keyPrefix: true, createdAt: true, lastUsedAt: true },
-      }),
-      db.testRun.findFirst({
-        where: {
-          projectId: project.id,
-          source: "MANUAL",
-          status: "IN_PROGRESS",
-        },
-        orderBy: { startedAt: "desc" },
-        include: {
-          results: {
-            select: { id: true, name: true, status: true },
-            orderBy: { createdAt: "asc" },
-          },
-        },
-      }),
-    ]);
+  const [recentRuns, countsByStatus, flakyCandidates, testCaseCount] = await Promise.all([
+    db.testRun.findMany({
+      where: { projectId: project.id },
+      orderBy: { startedAt: "desc" },
+      take: 10,
+      include: {
+        _count: { select: { results: true } },
+        results: { select: { status: true } },
+      },
+    }),
+    db.testResult.groupBy({
+      by: ["status"],
+      where: { run: { projectId: project.id } },
+      _count: { status: true },
+    }),
+    db.testRun.findMany({
+      where: { projectId: project.id, source: "AUTOMATED" },
+      orderBy: { startedAt: "desc" },
+      take: 5,
+      include: { results: { select: { name: true, status: true } } },
+    }),
+    db.testCase.count({ where: { projectId: project.id } }),
+  ]);
 
   const counts = { total: 0, passed: 0, failed: 0, skipped: 0, error: 0 };
 
@@ -127,37 +90,51 @@ export default async function DashboardPage() {
     .sort((a, b) => b.score - a.score)
     .slice(0, 8);
 
+  const isEmpty = counts.total === 0 && testCaseCount === 0;
+
   return (
-    <main className="mx-auto w-full max-w-7xl space-y-8 px-6 py-8">
-      {/* ── Header ── */}
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Project</p>
-          <h1 className="text-3xl font-semibold">{project.name}</h1>
+    <main className="mx-auto w-full max-w-6xl space-y-8 px-6 py-8">
+      {/* ── Page header ── */}
+      <header>
+        <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Overview</p>
+        <h1 className="mt-0.5 text-2xl font-semibold">Dashboard</h1>
+        {session.user.name && (
           <p className="mt-1 text-sm text-muted-foreground">
-            Welcome back, {session.user.name ?? session.user.email}.
+            Welcome back, {session.user.name.split(" ")[0]}.
           </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <CopyProjectId projectId={project.id} />
-          <LogoutButton />
-        </div>
+        )}
       </header>
 
-      {/* ── Overview ── */}
+      {/* ── Metric cards ── */}
       <section>
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-[0.14em] text-muted-foreground">
-          Overview
+        <h2 className="mb-3 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+          Test results
         </h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <MetricCard label="Total results" value={String(counts.total)} variant="default" />
           <MetricCard
             label="Pass rate"
             value={`${passRate}%`}
-            variant={passRate >= 80 ? "success" : passRate >= 50 ? "warning" : "danger"}
+            variant={
+              counts.total === 0
+                ? "default"
+                : passRate >= 80
+                ? "success"
+                : passRate >= 50
+                ? "warning"
+                : "danger"
+            }
           />
-          <MetricCard label="Passed" value={String(counts.passed)} variant="success" />
-          <MetricCard label="Failed" value={String(counts.failed)} variant={counts.failed > 0 ? "danger" : "default"} />
+          <MetricCard
+            label="Passed"
+            value={String(counts.passed)}
+            variant={counts.passed > 0 ? "success" : "default"}
+          />
+          <MetricCard
+            label="Failed"
+            value={String(counts.failed)}
+            variant={counts.failed > 0 ? "danger" : "default"}
+          />
           <MetricCard
             label="Skipped + Error"
             value={String(counts.skipped + counts.error)}
@@ -166,143 +143,112 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      {/* ── Empty state for first-time users ── */}
-      {counts.total === 0 && testCases.length === 0 && (
-        <section className="rounded-xl border border-dashed border-border bg-muted/30 p-8 text-center">
-          <p className="text-sm font-medium">No test results yet</p>
+      {/* ── Empty state ── */}
+      {isEmpty && (
+        <section className="rounded-xl border border-dashed border-border bg-muted/30 p-10 text-center">
+          <p className="text-sm font-medium">No test data yet</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Upload a JUnit run or create a manual test case to get started.
+            Create test cases or import a JUnit run to get started.
           </p>
-          <div className="mt-4 flex justify-center gap-3">
-            <a href="#upload-junit" className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90">
-              Upload JUnit run
-            </a>
-            <a href="#create-test-case" className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-muted">
-              Create test case
-            </a>
+          <div className="mt-5 flex justify-center gap-3">
+            <Link
+              href="/dashboard/tests"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+            >
+              Manage tests
+            </Link>
+            <Link
+              href="/dashboard/settings"
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-muted"
+            >
+              Import JUnit run
+            </Link>
           </div>
         </section>
       )}
 
-      {/* ── Actions ── */}
-      <section>
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-[0.14em] text-muted-foreground">
-          Actions
-        </h2>
-        <DashboardActions
-          projectId={project.id}
-          testCases={(
-            testCases as Array<{
-              id: string;
-              title: string;
-              priority: string;
-              module: { name: string } | null;
-            }>
-          ).map((tc) => ({
-            id: tc.id,
-            title: tc.title,
-            priority: tc.priority,
-            module: tc.module?.name ?? null,
-          }))}
-          apiKeys={(
-            apiKeys as Array<{
-              id: string;
-              name: string;
-              keyPrefix: string;
-              createdAt: Date;
-              lastUsedAt: Date | null;
-            }>
-          )}
-          activeManualRun={
-            activeManualRun
-              ? {
-                  id: activeManualRun.id,
-                  name: activeManualRun.name,
-                  status: activeManualRun.status,
-                  results: activeManualRun.results,
-                }
-              : null
-          }
-        />
-      </section>
-
       {/* ── History ── */}
-      <section>
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-[0.14em] text-muted-foreground">
-          History
-        </h2>
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h3 className="text-lg font-semibold">Recent runs</h3>
-            <div className="mt-4 space-y-3">
-              {(
-                recentRuns as Array<{
-                  id: string;
-                  name: string;
-                  source: string;
-                  startedAt: Date;
-                  _count: { results: number };
-                  results: Array<{ status: string }>;
-                }>
-              ).map((run) => {
-                const total = run.results.length;
-                const passed = run.results.filter((r) => r.status === "PASSED").length;
-                const rate = percent(passed, total);
+      {(recentRuns.length > 0 || flakyTests.length > 0) && (
+        <section>
+          <h2 className="mb-3 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            History
+          </h2>
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* Recent runs */}
+            <div className="rounded-xl border border-border bg-card p-5">
+              <h3 className="text-base font-semibold">Recent runs</h3>
+              <div className="mt-4 space-y-2.5">
+                {(
+                  recentRuns as Array<{
+                    id: string;
+                    name: string;
+                    source: string;
+                    startedAt: Date;
+                    _count: { results: number };
+                    results: Array<{ status: string }>;
+                  }>
+                ).map((run) => {
+                  const total = run.results.length;
+                  const passed = run.results.filter((r) => r.status === "PASSED").length;
+                  const rate = percent(passed, total);
 
-                return (
-                  <div key={run.id} className="rounded-lg border border-border p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-medium">{run.name}</p>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(run.startedAt).toLocaleString()}
-                      </span>
+                  return (
+                    <div key={run.id} className="rounded-lg border border-border bg-background/50 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="truncate text-sm font-medium">{run.name}</p>
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {new Date(run.startedAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {run.source} · {run._count.results} tests
+                        </span>
+                        <span
+                          className={`text-xs font-semibold ${
+                            rate >= 80
+                              ? "text-[var(--success)]"
+                              : rate >= 50
+                              ? "text-[var(--warning)]"
+                              : "text-destructive"
+                          }`}
+                        >
+                          {rate}% pass
+                        </span>
+                      </div>
                     </div>
-                    <div className="mt-1 flex items-center gap-2">
-                      <p className="text-xs text-muted-foreground">
-                        {run.source} · {run._count.results} tests
-                      </p>
-                      <span
-                        className={`text-xs font-medium ${
-                          rate >= 80
-                            ? "text-[var(--success)]"
-                            : rate >= 50
-                            ? "text-[var(--warning)]"
-                            : "text-destructive"
-                        }`}
-                      >
-                        {rate}% pass
-                      </span>
-                    </div>
+                  );
+                })}
+                {recentRuns.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No runs yet.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Flaky tests */}
+            <div className="rounded-xl border border-border bg-card p-5">
+              <h3 className="text-base font-semibold">Flaky tests</h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">Last 5 automated runs</p>
+              <div className="mt-4 space-y-2">
+                {flakyTests.map((item) => (
+                  <div
+                    key={item.name}
+                    className="flex items-center justify-between rounded-lg border border-border bg-background/50 p-3"
+                  >
+                    <p className="truncate text-sm font-medium">{item.name}</p>
+                    <span className="ml-3 shrink-0 text-xs font-semibold text-[var(--warning)]">
+                      {item.score}% fail
+                    </span>
                   </div>
-                );
-              })}
-              {!recentRuns.length ? (
-                <p className="text-sm text-muted-foreground">No runs yet.</p>
-              ) : null}
+                ))}
+                {flakyTests.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No flaky tests detected.</p>
+                )}
+              </div>
             </div>
           </div>
-
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h3 className="text-lg font-semibold">Flaky tests (last 5 automated runs)</h3>
-            <div className="mt-4 space-y-2">
-              {flakyTests.map((item) => (
-                <div
-                  key={item.name}
-                  className="flex items-center justify-between rounded-lg border border-border p-3"
-                >
-                  <p className="text-sm font-medium">{item.name}</p>
-                  <span className="text-xs font-medium text-[var(--warning)]">
-                    {item.score}% fail rate
-                  </span>
-                </div>
-              ))}
-              {!flakyTests.length ? (
-                <p className="text-sm text-muted-foreground">No flaky tests detected yet.</p>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
     </main>
   );
 }
