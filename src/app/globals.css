@@ -39,6 +39,12 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -67,11 +73,19 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  /* Semantic status colors */
+  --success: oklch(0.723 0.219 149.579);
+  --success-foreground: oklch(0.985 0 0);
+  --warning: oklch(0.769 0.188 86.047);
+  --warning-foreground: oklch(0.145 0 0);
+  --info: oklch(0.701 0.156 216.0);
+  --info-foreground: oklch(0.985 0 0);
+  /* Hued chart colors (was all grayscale) */
+  --chart-1: oklch(0.701 0.156 216.0);   /* cyan / brand */
+  --chart-2: oklch(0.723 0.219 149.579); /* green */
+  --chart-3: oklch(0.769 0.188 86.047);  /* amber */
+  --chart-4: oklch(0.577 0.245 27.325);  /* red */
+  --chart-5: oklch(0.666 0.2 268.4);     /* purple */
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -102,11 +116,19 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  /* Semantic status colors (dark) */
+  --success: oklch(0.627 0.194 149.214);
+  --success-foreground: oklch(0.985 0 0);
+  --warning: oklch(0.688 0.173 86.047);
+  --warning-foreground: oklch(0.145 0 0);
+  --info: oklch(0.623 0.143 216.0);
+  --info-foreground: oklch(0.985 0 0);
+  /* Hued chart colors (dark) */
+  --chart-1: oklch(0.623 0.143 216.0);
+  --chart-2: oklch(0.627 0.194 149.214);
+  --chart-3: oklch(0.688 0.173 86.047);
+  --chart-4: oklch(0.704 0.191 22.216);
+  --chart-5: oklch(0.590 0.19 268.4);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);

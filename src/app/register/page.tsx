@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
 export default function RegisterPage() {
@@ -18,10 +17,12 @@ export default function RegisterPage() {
     setLoading(true);
     setError(null);
 
+    const normalizedEmail = email.trim().toLowerCase();
+
     const response = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify({ name, email: normalizedEmail, password }),
     });
 
     if (!response.ok) {
@@ -31,21 +32,8 @@ export default function RegisterPage() {
       return;
     }
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
-
     setLoading(false);
-
-    if (result?.error) {
-      router.push("/login");
-      return;
-    }
-
-    router.push("/dashboard");
-    router.refresh();
+    router.push("/login?registered=1");
   }
 
   return (

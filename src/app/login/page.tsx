@@ -1,16 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showRegistrationSuccess, setShowRegistrationSuccess] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setShowRegistrationSuccess(params.get("registered") === "1");
+  }, []);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -18,26 +22,31 @@ export default function LoginPage() {
     setError(null);
 
     const result = await signIn("credentials", {
-      email,
+      email: email.trim().toLowerCase(),
       password,
       redirect: false,
     });
 
     setLoading(false);
 
-    if (result?.error) {
+    if (result?.error || !result?.ok) {
       setError("Invalid credentials.");
       return;
     }
 
-    router.push("/dashboard");
-    router.refresh();
+    window.location.href = "/dashboard";
   }
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-6 py-12">
       <h1 className="text-3xl font-semibold">Welcome back</h1>
       <p className="mt-2 text-sm text-muted-foreground">Sign in to access your QA dashboard.</p>
+
+      {showRegistrationSuccess ? (
+        <p className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">
+          Account created successfully. Please sign in.
+        </p>
+      ) : null}
 
       <form className="mt-8 space-y-4" onSubmit={onSubmit}>
         <label className="block text-sm font-medium" htmlFor="email">

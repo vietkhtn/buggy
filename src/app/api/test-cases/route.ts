@@ -4,6 +4,8 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { ensureProjectForUser, userHasProjectAccess } from "@/lib/projects";
 
+// ─── Validation Schemas ───────────────────────────────────────────────────────
+
 const stepSchema = z.object({
   action: z.string().trim().min(1),
   expectedResult: z.string().trim().min(1),
@@ -21,6 +23,14 @@ const createTestCaseSchema = z.object({
   steps: z.array(stepSchema).min(1),
 });
 
+// ─── GET /api/test-cases ──────────────────────────────────────────────────────
+// Supports cursor-based pagination for projects with up to 10 000 test cases.
+// Query parameters:
+//   projectId  – optional, uses the caller's default project when omitted
+//   cursor     – cuid of the last item from the previous page (optional)
+//   limit      – page size, 1–200, default 100
+//   search     – case-insensitive title substring filter (optional)
+
 export async function GET(request: Request) {
   const session = await auth();
 
@@ -30,6 +40,11 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const requestedProjectId = searchParams.get("projectId");
+  const cursor = searchParams.get("cursor") ?? undefined;
+  const rawLimit = Number(searchParams.get("limit") ?? "100");
+  const limit = Math.min(Math.max(rawLimit, 1), 200);
+  const search = searchParams.get("search")?.trim() ?? undefined;
+
   const project = requestedProjectId
     ? { id: requestedProjectId }
     : await ensureProjectForUser(session.user.id);
@@ -39,18 +54,35 @@ export async function GET(request: Request) {
   }
 
   const testCases = await db.testCase.findMany({
-    where: { projectId: project.id },
+    where: {
+      projectId: project.id,
+      ...(search
+        ? { title: { contains: search, mode: "insensitive" } }
+        : {}),
+    },
     include: {
       module: true,
-      steps: {
-        orderBy: { stepNumber: "asc" },
-      },
+      steps: { orderBy: { stepNumber: "asc" } },
     },
     orderBy: { createdAt: "desc" },
+    // Fetch one extra record to determine whether another page exists.
+    take: limit + 1,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });
 
-  return NextResponse.json({ testCases, projectId: project.id });
+  const hasNextPage = testCases.length > limit;
+  const page = hasNextPage ? testCases.slice(0, limit) : testCases;
+  const nextCursor = hasNextPage ? page[page.length - 1]?.id : undefined;
+
+  return NextResponse.json({
+    testCases: page,
+    nextCursor,
+    hasNextPage,
+    projectId: project.id,
+  });
 }
+
+// ─── POST /api/test-cases ─────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -104,9 +136,7 @@ export async function POST(request: Request) {
         },
       },
       include: {
-        steps: {
-          orderBy: { stepNumber: "asc" },
-        },
+        steps: { orderBy: { stepNumber: "asc" } },
         module: true,
       },
     });
@@ -120,6 +150,7 @@ export async function POST(request: Request) {
       );
     }
 
+    console.error("[POST /api/test-cases]", error);
     return NextResponse.json({ error: "Unable to create test case." }, { status: 500 });
   }
 }
