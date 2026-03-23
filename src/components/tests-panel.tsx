@@ -477,10 +477,10 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
       const buffer = await file.arrayBuffer();
       const workbook = XLSX.read(buffer, { type: "array" });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { header: 1, defval: "" });
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as unknown[][];
 
       if (rows.length > 0) {
-        const headers = (rows[0] as unknown[]).map(h => String(h ?? "").trim()).filter(Boolean);
+        const headers = rows[0].map(h => String(h ?? "").trim()).filter(Boolean);
         setCsvHeaders(headers);
 
         // Initial smart mapping
@@ -905,7 +905,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
                       onValueChange={(val) => setColumnMapping(prev => ({ 
                         ...prev, 
                         [field.id]: val === "none" ? "" : val 
-                      }))}
+                      }) as Record<string, string>)}
                     >
                       <SelectTrigger className="h-9">
                         <SelectValue placeholder="Select column..." />
