@@ -40,7 +40,7 @@ const PRIORITY_VARIANT: Record<string, "default" | "secondary" | "destructive" |
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function ActiveRunPanel({ run: initialRun }: { run: Run }) {
+export function ActiveRunPanel({ run: initialRun, testsUrl = "/dashboard" }: { run: Run; testsUrl?: string }) {
   const router = useRouter();
   const [results, setResults] = useState<RunResult[]>(initialRun.results);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -104,7 +104,7 @@ export function ActiveRunPanel({ run: initialRun }: { run: Run }) {
         <div className="flex items-center gap-4">
           <button
             type="button"
-            onClick={() => router.push("/dashboard/tests")}
+            onClick={() => router.push(testsUrl)}
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

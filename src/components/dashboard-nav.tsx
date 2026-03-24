@@ -41,19 +41,21 @@ function SettingsIcon() {
   );
 }
 
-const NAV_ITEMS = [
-  { href: "/dashboard", label: "Overview", icon: <OverviewIcon />, exact: true },
-  { href: "/dashboard/tests", label: "Tests", icon: <TestsIcon />, exact: false },
-  { href: "/dashboard/metrics", label: "Metrics", icon: <MetricsIcon />, exact: false },
-  { href: "/dashboard/settings", label: "Settings", icon: <SettingsIcon />, exact: false },
-];
+function navItems(projectId: string) {
+  return [
+    { href: `/dashboard/${projectId}`, label: "Overview", icon: <OverviewIcon />, exact: true },
+    { href: `/dashboard/${projectId}/tests`, label: "Tests", icon: <TestsIcon />, exact: false },
+    { href: `/dashboard/${projectId}/metrics`, label: "Metrics", icon: <MetricsIcon />, exact: false },
+    { href: `/dashboard/${projectId}/settings`, label: "Settings", icon: <SettingsIcon />, exact: false },
+  ];
+}
 
-export function DashboardNav() {
+export function DashboardNav({ projectId }: { projectId: string }) {
   const pathname = usePathname();
 
   return (
     <nav className="flex flex-col gap-0.5 px-3">
-      {NAV_ITEMS.map((item) => {
+      {navItems(projectId).map((item) => {
         const isActive = item.exact
           ? pathname === item.href
           : pathname.startsWith(item.href);

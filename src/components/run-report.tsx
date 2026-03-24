@@ -14,6 +14,7 @@ type ReportResult = {
     title: string;
     description: string | null;
     preconditions: string | null;
+    expectedResult: string | null;
     priority: string;
     module: { name: string } | null;
   } | null;
@@ -26,6 +27,7 @@ type ReportRun = {
   startedAt: string;
   completedAt: string | null;
   results: ReportResult[];
+  projectName?: string;
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -46,7 +48,7 @@ const STATUS_COLOR: Record<string, string> = {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function RunReport({ run }: { run: ReportRun }) {
+export function RunReport({ run, backUrl = "/dashboard" }: { run: ReportRun; backUrl?: string }) {
   const passed = run.results.filter((r) => r.status === "PASSED").length;
   const failed = run.results.filter((r) => r.status === "FAILED").length;
   const skipped = run.results.filter((r) => r.status === "SKIPPED" || r.status === "BLOCKED").length;
@@ -74,7 +76,7 @@ export function RunReport({ run }: { run: ReportRun }) {
         {/* ── Toolbar (hidden in print) ── */}
         <div className="no-print mb-6 flex items-center justify-between gap-4">
           <a
-            href="/dashboard/tests"
+            href={backUrl}
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -92,7 +94,9 @@ export function RunReport({ run }: { run: ReportRun }) {
 
         {/* ── Report header ── */}
         <div className="mb-8">
-          <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Test run report</p>
+          <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+            {run.projectName ? `${run.projectName} · ` : ""}Test run report
+          </p>
           <h1 className="mt-1 text-3xl font-bold">{run.name}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{completedDate}</p>
         </div>
@@ -182,6 +186,16 @@ export function RunReport({ run }: { run: ReportRun }) {
                       </p>
                     </div>
                   )}
+                  {result.testCase?.expectedResult && (
+                    <div className="mt-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                        Expected result
+                      </p>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                        {result.testCase.expectedResult}
+                      </p>
+                    </div>
+                  )}
                   {result.notes && (
                     <div className="mt-3 rounded-lg bg-destructive/10 px-4 py-3">
                       <p className="text-xs font-bold uppercase tracking-widest text-destructive mb-1.5">
@@ -213,6 +227,9 @@ export function RunReport({ run }: { run: ReportRun }) {
                     Status
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Expected result
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Actual result
                   </th>
                 </tr>
@@ -231,6 +248,9 @@ export function RunReport({ run }: { run: ReportRun }) {
                     </td>
                     <td className={`px-4 py-3 text-xs font-bold ${STATUS_COLOR[result.status] ?? "text-muted-foreground"}`}>
                       {STATUS_LABEL[result.status] ?? result.status}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">
+                      {result.testCase?.expectedResult ?? <span className="text-muted-foreground/40">—</span>}
                     </td>
                     <td className="px-4 py-3 text-sm text-muted-foreground">
                       {result.notes ?? <span className="text-muted-foreground/40">—</span>}

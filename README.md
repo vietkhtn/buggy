@@ -35,7 +35,7 @@ The fastest way to get Buggy up and running is via **Docker Compose**.
 git clone https://github.com/pdnhan/buggy.git && cd buggy
 cp .env.example .env
 ```
-*(Optional: Edit `.env` for OAuth providers or custom secrets)*
+*(Optional: Edit `.env` to customize secrets)*
 
 ### 2. Launch the Stack
 ```bash
@@ -47,7 +47,7 @@ This starts:
 - 🔄 **Auto-migrations** for your database schema
 
 ### 3. Log In
-Open `http://localhost:3000`. Use email/password or any configured OAuth provider to get started. Your first project will be automatically created!
+Open `http://localhost:3000`. Use email/password to get started. Your first project will be automatically created!
 
 ---
 
@@ -90,7 +90,7 @@ curl -X POST http://localhost:3000/api/v1/runs \
 
 ## 🏗 Tech Stack
 
-- **Framework**: [Next.js 15+](https://nextjs.org/) (App Router)
+- **Framework**: [Next.js 16+](https://nextjs.org/) (App Router)
 - **Language**: [TypeScript](https://www.typescriptlang.org/)
 - **ORM**: [Prisma](https://www.prisma.io/)
 - **Database**: [PostgreSQL](https://www.postgresql.org/)

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { db } from "./db";
-import { deriveTestCasePrefix } from "./test-case-ids";
+import { deriveTestCasePrefix, sanitizeTestCasePrefix } from "./test-case-ids";
 
 function defaultProjectName(userName: string | null | undefined) {
   if (!userName?.trim()) return "My Project";
@@ -68,6 +68,44 @@ export async function ensureProjectForUser(userId: string) {
     // Re-throw to let calling code handle it appropriately
     throw error;
   }
+}
+
+export async function getUserProjects(userId: string) {
+  const memberships = await db.projectMember.findMany({
+    where: { userId },
+    include: {
+      project: {
+        include: {
+          _count: { select: { members: true, testCases: true } },
+        },
+      },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  return memberships.map((m) => ({ ...m.project, role: m.role }));
+}
+
+export async function createProject(
+  userId: string,
+  data: { name: string; description?: string; initials?: string }
+) {
+  const name = data.name.trim();
+  const slugBase = slugify(name) || "project";
+  const prefix = data.initials
+    ? sanitizeTestCasePrefix(data.initials)
+    : deriveTestCasePrefix(name);
+
+  return db.project.create({
+    data: {
+      name,
+      description: data.description?.trim() || null,
+      slug: `${slugBase}-${randomUUID().slice(0, 8)}`,
+      testCasePrefix: prefix,
+      members: {
+        create: { userId, role: "ADMIN" },
+      },
+    },
+  });
 }
 
 export async function userHasProjectAccess(userId: string, projectId: string) {

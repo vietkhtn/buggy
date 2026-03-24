@@ -221,11 +221,11 @@ Content-Type: application/json
 ## Technical Specifications
 
 ### Stack
-- **Frontend**: Next.js 14 (App Router), TypeScript, Tailwind CSS, shadcn/ui
+- **Frontend**: Next.js 16 (App Router), TypeScript, Tailwind CSS, shadcn/ui
 - **Backend**: Next.js API routes, Prisma ORM
 - **Database**: PostgreSQL 15+
 - **Authentication**: First-party email/password service with session tokens
-- **PDF Generation**: @react-pdf/renderer or Puppeteer
+- **PDF Generation**: jspdf + jspdf-autotable
 - **Deployment**: Docker + Docker Compose (self-hosted)
 
 ### Database Schema (Core Entities)
