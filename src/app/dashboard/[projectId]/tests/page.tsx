@@ -42,6 +42,7 @@ export default async function TestsPage({
         status: true,
         description: true,
         preconditions: true,
+        expectedResult: true,
         tags: true,
         jiraKey: true,
       },
@@ -96,6 +97,7 @@ export default async function TestsPage({
       status: string;
       description: string | null;
       preconditions: string | null;
+      expectedResult: string | null;
       tags: string[];
       jiraKey: string | null;
     }>
@@ -108,6 +110,7 @@ export default async function TestsPage({
     status: tc.status,
     description: tc.description,
     preconditions: tc.preconditions,
+    expectedResult: tc.expectedResult,
     tags: tc.tags,
     jiraKey: tc.jiraKey,
   }));

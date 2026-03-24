@@ -131,7 +131,7 @@ export async function POST(request: Request) {
             title: row.title,
             description: row.description || undefined,
             preconditions: row.preconditions || undefined,
-            expectedResult: row.expectedresult || row.expected || undefined,
+            expectedResult: row.expectedResult || row.expectedresult || row.expected || undefined,
             priority: toPriority(row.priority ?? ""),
             status: toStatus(row.status ?? ""),
             tags,

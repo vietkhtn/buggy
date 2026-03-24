@@ -547,7 +547,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
 
         // Initial smart mapping
         const initialMapping: Record<string, string> = {};
-        const targets = ["title", "description", "module", "priority", "status", "tags", "preconditions", "jira"];
+        const targets = ["title", "description", "module", "priority", "status", "tags", "preconditions", "expectedResult", "jira"];
         
         targets.forEach(t => {
           const match = headers.find(h => 
@@ -885,7 +885,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
             <DialogTitle>Edit test case</DialogTitle>
             <DialogDescription>Update the test case details.</DialogDescription>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={saveEdit}>
+          <form key={editTarget?.id} className="space-y-4" onSubmit={saveEdit}>
             <CaseFormFields
               showAdvanced={editShowAdvanced}
               setShowAdvanced={setEditShowAdvanced}
@@ -987,6 +987,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
                   { id: "status", label: "Status" },
                   { id: "tags", label: "Tags" },
                   { id: "preconditions", label: "Preconditions" },
+                  { id: "expectedResult", label: "Expected Result" },
                   { id: "jira", label: "Jira Reference" },
                 ].map((field) => (
                   <div key={field.id} className="space-y-1.5">
