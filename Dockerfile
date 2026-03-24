@@ -21,6 +21,11 @@ RUN npx prisma generate
 
 # Build the application
 ENV NEXT_TELEMETRY_DISABLED=1
+# AUTH_SECRET must be non-empty at build time (next-auth reads it during route analysis).
+# The actual secret is injected at runtime via docker-compose environment; this placeholder
+# is never used at runtime.
+ARG AUTH_SECRET=build-time-placeholder
+ENV AUTH_SECRET=$AUTH_SECRET
 RUN npm run build
 
 # Stage 3: Runner
