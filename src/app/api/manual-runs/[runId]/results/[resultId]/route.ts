@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { userHasProjectAccess } from "@/lib/projects";
 
 const updateResultSchema = z.object({
-  status: z.enum(["PASSED", "FAILED", "BLOCKED"]),
+  status: z.enum(["PASSED", "FAILED", "SKIPPED"]),
   notes: z.string().max(10_000).optional(),
 });
 

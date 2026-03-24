@@ -52,6 +52,17 @@ type ManualRun = {
   results: ManualResult[];
 };
 
+type CompletedRun = {
+  id: string;
+  name: string;
+  completedAt: string | null;
+  startedAt: string;
+  passed: number;
+  failed: number;
+  skipped: number;
+  total: number;
+};
+
 type SuiteCase = {
   id: string;
   testCase: {
@@ -78,6 +89,7 @@ type Props = {
   testCases: TestCaseItem[];
   activeManualRun: ManualRun | null;
   suites: TestSuite[];
+  completedRuns: CompletedRun[];
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -258,7 +270,7 @@ function CaseFormFields({
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualRun, suites: initialSuites }: Props) {
+export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualRun, suites: initialSuites, completedRuns }: Props) {
   const router = useRouter();
 
   // ── Create dialog ────────────────────────────────────────────────────────────
@@ -289,6 +301,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
 
   // ── Manual run ───────────────────────────────────────────────────────────────
   const [selectedCases, setSelectedCases] = useState<string[]>([]);
+  const [selectedSuiteId, setSelectedSuiteId] = useState<string | null>(null);
   const [runCaseSearch, setRunCaseSearch] = useState("");
   const [runName, setRunName] = useState(`Manual Run ${new Date().toLocaleDateString()}`);
   const [creatingRun, setCreatingRun] = useState(false);
@@ -585,9 +598,11 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
         return;
       }
 
+      const { runId } = await response.json() as { runId: string };
       toast.success("Manual run started.", { id: toastId });
       setSelectedCases([]);
-      router.refresh();
+      setSelectedSuiteId(null);
+      router.push(`/dashboard/tests/run/${runId}`);
     } catch {
       toast.error("Network error — run not started.", { id: toastId });
     } finally {
@@ -962,70 +977,90 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
           if (!open) { setSuiteSelectedCases([]); setSuiteCaseSearch(""); }
         }}
       >
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b border-border px-6 py-5">
             <DialogTitle>New test suite</DialogTitle>
             <DialogDescription>Group test cases into a named suite.</DialogDescription>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={createSuite}>
-            <div className="space-y-1">
-              <Label htmlFor="suite-name">Suite name *</Label>
-              <Input id="suite-name" name="name" required placeholder="e.g. Smoke Tests" />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="suite-description">Description</Label>
-              <Input id="suite-description" name="description" placeholder="Optional description" />
-            </div>
-            <div className="space-y-2">
-              <Label>Test cases</Label>
-              <Input
-                type="search"
-                placeholder="Search cases…"
-                value={suiteCaseSearch}
-                onChange={(e) => setSuiteCaseSearch(e.target.value)}
-              />
-              <div className="max-h-48 overflow-auto rounded-lg border border-border">
-                <div className="space-y-0.5 p-2">
-                  {filteredSuiteCases.map((tc) => {
-                    const selected = suiteSelectedCases.includes(tc.id);
-                    return (
-                      <label
-                        key={tc.id}
-                        className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted"
-                      >
-                        <input
-                          type="checkbox"
-                          className="accent-primary"
-                          checked={selected}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSuiteSelectedCases((cur) => [...cur, tc.id]);
-                            } else {
-                              setSuiteSelectedCases((cur) => cur.filter((id) => id !== tc.id));
-                            }
-                          }}
-                        />
-                        <span className="flex-1 truncate">{tc.title}</span>
-                        {tc.module && (
-                          <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                            {tc.module}
-                          </span>
-                        )}
-                      </label>
-                    );
-                  })}
-                  {filteredSuiteCases.length === 0 && (
-                    <p className="px-2 py-3 text-sm text-muted-foreground">No matches.</p>
-                  )}
-                </div>
+          <form className="flex min-h-0 flex-1 flex-col" onSubmit={createSuite}>
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+              <div className="space-y-1.5">
+                <Label htmlFor="suite-name">Suite name *</Label>
+                <Input id="suite-name" name="name" required placeholder="e.g. Smoke Tests" />
               </div>
-              {suiteSelectedCases.length > 0 && (
+              <div className="space-y-1.5">
+                <Label htmlFor="suite-description">Description</Label>
+                <Input id="suite-description" name="description" placeholder="Optional description" />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Test cases</Label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allIds = filteredSuiteCases.map((tc) => tc.id);
+                      const allSelected = allIds.every((id) => suiteSelectedCases.includes(id));
+                      if (allSelected) {
+                        setSuiteSelectedCases((cur) => cur.filter((id) => !allIds.includes(id)));
+                      } else {
+                        setSuiteSelectedCases((cur) => [...new Set([...cur, ...allIds])]);
+                      }
+                    }}
+                    className="text-xs text-primary hover:underline underline-offset-4"
+                  >
+                    {filteredSuiteCases.length > 0 &&
+                    filteredSuiteCases.every((tc) => suiteSelectedCases.includes(tc.id))
+                      ? "Deselect all"
+                      : "Select all"}
+                  </button>
+                </div>
+                <Input
+                  type="search"
+                  placeholder="Search cases…"
+                  value={suiteCaseSearch}
+                  onChange={(e) => setSuiteCaseSearch(e.target.value)}
+                />
+                <div className="max-h-52 overflow-auto rounded-lg border border-border">
+                  <div className="space-y-0.5 p-2">
+                    {filteredSuiteCases.map((tc) => {
+                      const selected = suiteSelectedCases.includes(tc.id);
+                      return (
+                        <label
+                          key={tc.id}
+                          className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted"
+                        >
+                          <input
+                            type="checkbox"
+                            className="accent-primary"
+                            checked={selected}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSuiteSelectedCases((cur) => [...cur, tc.id]);
+                              } else {
+                                setSuiteSelectedCases((cur) => cur.filter((id) => id !== tc.id));
+                              }
+                            }}
+                          />
+                          <span className="flex-1 truncate">{tc.title}</span>
+                          {tc.module && (
+                            <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                              {tc.module}
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                    {filteredSuiteCases.length === 0 && (
+                      <p className="px-2 py-3 text-sm text-muted-foreground">No matches.</p>
+                    )}
+                  </div>
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {suiteSelectedCases.length} case{suiteSelectedCases.length !== 1 ? "s" : ""} selected
                 </p>
-              )}
+              </div>
             </div>
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="shrink-0 border-t border-border px-6 py-4 flex justify-end gap-3">
               <Button type="button" variant="outline" onClick={() => setShowCreateSuiteDialog(false)}>
                 Cancel
               </Button>
@@ -1160,6 +1195,14 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
             Manual run
             {activeManualRun && (
               <span className="ml-2 inline-flex h-2 w-2 rounded-full bg-[var(--warning)]" aria-label="Active run" />
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="history">
+            History
+            {completedRuns.length > 0 && (
+              <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground">
+                {completedRuns.length}
+              </span>
             )}
           </TabsTrigger>
         </TabsList>
@@ -1381,12 +1424,81 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
 
         {/* ── Manual run tab ── */}
         <TabsContent value="run">
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div className="space-y-4">
+          <div className="space-y-6">
+            {/* Active run banner */}
+            {activeManualRun && (
+              <div className="flex items-center justify-between gap-4 rounded-xl border border-[var(--warning)] bg-[oklch(from_var(--warning)_l_c_h_/_0.08)] px-5 py-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-[var(--warning)]">
+                    Active run
+                  </p>
+                  <p className="mt-0.5 font-semibold">{activeManualRun.name}</p>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    {activeManualRun.results.filter((r) => r.status !== "BLOCKED").length} of{" "}
+                    {activeManualRun.results.length} tested
+                  </p>
+                </div>
+                <a href={`/dashboard/tests/run/${activeManualRun.id}`}>
+                  <Button>
+                    Continue testing
+                    <svg
+                      className="ml-1.5 h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Button>
+                </a>
+              </div>
+            )}
+
+            {/* New run form */}
+            <div className="max-w-lg space-y-4">
+              {/* Suite picker */}
+              {suites.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label>Start from suite</Label>
+                  <Select
+                    value={selectedSuiteId ?? "none"}
+                    onValueChange={(val) => {
+                      if (val === "none") {
+                        setSelectedSuiteId(null);
+                        setSelectedCases([]);
+                      } else {
+                        setSelectedSuiteId(val);
+                        const suite = suites.find((s) => s.id === val);
+                        if (suite) setSelectedCases(suite.cases.map((c) => c.testCase.id));
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a suite…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— No suite —</SelectItem>
+                      {suites.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}{" "}
+                          <span className="text-muted-foreground">({s.cases.length})</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Selecting a suite pre-fills the cases below — you can still adjust individually.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <h3 className="text-sm font-semibold">Select test cases</h3>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {testCases.length > 0 ? `${testCases.length} available` : "No test cases yet — create some first."}
+                  {testCases.length > 0
+                    ? `${testCases.length} available`
+                    : "No test cases yet — create some first."}
                 </p>
               </div>
 
@@ -1430,7 +1542,10 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
                               {testCase.module}
                             </span>
                           )}
-                          <Badge variant={PRIORITY_VARIANT[testCase.priority] ?? "outline"} className="px-1 py-0 text-xs">
+                          <Badge
+                            variant={PRIORITY_VARIANT[testCase.priority] ?? "outline"}
+                            className="px-1 py-0 text-xs"
+                          >
                             {testCase.priority}
                           </Badge>
                         </span>
@@ -1471,69 +1586,54 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
                 {creatingRun ? "Creating run…" : "Start manual run"}
               </Button>
             </div>
-
-            <div>
-              {activeManualRun ? (
-                <div className="rounded-xl border border-border bg-card p-5 space-y-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Active run</p>
-                      <p className="mt-0.5 font-semibold">{activeManualRun.name}</p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      {pendingResults.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={passAllRemaining}
-                          className="rounded-md border border-[var(--success)] px-2 py-1 text-xs text-[var(--success)] transition hover:bg-[var(--success)] hover:text-[var(--success-foreground)]"
-                        >
-                          Pass all
-                        </button>
-                      )}
-                      <Button type="button" size="sm" variant="outline" disabled={completingRun} onClick={completeManualRun}>
-                        {completingRun ? "Completing…" : "Complete"}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="max-h-96 space-y-2 overflow-auto">
-                    {activeManualRun.results.map((result) => (
-                      <div key={result.id} className="rounded-lg border border-border bg-background p-3">
-                        <p className="mb-2 text-sm font-medium">{result.name}</p>
-                        <div className="flex gap-2">
-                          {(["PASSED", "FAILED", "BLOCKED"] as const).map((status) => {
-                            const isSelected = result.status === status;
-                            return (
-                              <button
-                                key={status}
-                                type="button"
-                                disabled={updatingResultId === result.id}
-                                onClick={() => updateManualResult(result.id, status)}
-                                className={`rounded-md border px-2 py-1 text-xs transition-colors disabled:opacity-60 ${
-                                  isSelected ? STATUS_SELECTED_STYLES[status] : STATUS_STYLES[status]
-                                }`}
-                              >
-                                {status}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="flex h-full min-h-48 items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">No active run</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Select cases and start a run to see results here.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
+        </TabsContent>
+
+        {/* ── History tab ── */}
+        <TabsContent value="history">
+          {completedRuns.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border bg-muted/30 p-10 text-center">
+              <p className="text-sm font-medium">No completed runs yet</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Completed manual runs will appear here with links to their reports.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {completedRuns.map((run) => {
+                const passRate =
+                  run.total > 0 ? Math.round((run.passed / run.total) * 100) : 0;
+                const date = run.completedAt
+                  ? new Date(run.completedAt).toLocaleString()
+                  : new Date(run.startedAt).toLocaleString();
+                return (
+                  <div
+                    key={run.id}
+                    className="flex items-center gap-4 rounded-xl border border-border bg-card px-5 py-4"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold truncate">{run.name}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{date}</p>
+                    </div>
+                    <div className="hidden sm:flex items-center gap-4 text-sm">
+                      <span className="text-[var(--success)] font-semibold">
+                        {run.passed} passed
+                      </span>
+                      {run.failed > 0 && (
+                        <span className="text-destructive font-semibold">{run.failed} failed</span>
+                      )}
+                      <span className="text-muted-foreground">{passRate}%</span>
+                    </div>
+                    <a href={`/dashboard/tests/run/${run.id}/report`}>
+                      <Button variant="outline" size="sm">
+                        View report
+                      </Button>
+                    </a>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </>

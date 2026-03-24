@@ -13,7 +13,7 @@ export default async function TestsPage() {
 
   const project = await ensureProjectForUser(session.user.id);
 
-  const [testCases, activeManualRun, suites] = await Promise.all([
+  const [testCases, activeManualRun, suites, completedRunsRaw] = await Promise.all([
     db.testCase.findMany({
       where: { projectId: project.id },
       orderBy: { createdAt: "desc" },
@@ -67,6 +67,12 @@ export default async function TestsPage() {
         },
       },
     }),
+    db.testRun.findMany({
+      where: { projectId: project.id, source: "MANUAL", status: "COMPLETED" },
+      orderBy: { completedAt: "desc" },
+      take: 20,
+      include: { results: { select: { status: true } } },
+    }),
   ]);
 
   const mappedTestCases = (
@@ -108,6 +114,17 @@ export default async function TestsPage() {
       }
     : null;
 
+  const completedRuns = completedRunsRaw.map((run) => ({
+    id: run.id,
+    name: run.name,
+    completedAt: run.completedAt?.toISOString() ?? null,
+    startedAt: run.startedAt.toISOString(),
+    passed: run.results.filter((r) => r.status === "PASSED").length,
+    failed: run.results.filter((r) => r.status === "FAILED").length,
+    skipped: run.results.filter((r) => r.status === "SKIPPED" || r.status === "BLOCKED").length,
+    total: run.results.length,
+  }));
+
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-8">
       <TestsPanel
@@ -116,6 +133,7 @@ export default async function TestsPage() {
         testCases={mappedTestCases}
         activeManualRun={mappedRun}
         suites={suites}
+        completedRuns={completedRuns}
       />
     </main>
   );
