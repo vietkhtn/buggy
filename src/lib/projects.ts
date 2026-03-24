@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import { db } from "./db";
 import { deriveTestCasePrefix, sanitizeTestCasePrefix } from "./test-case-ids";
 
@@ -87,15 +88,17 @@ export async function getUserProjects(userId: string) {
 
 export async function createProject(
   userId: string,
-  data: { name: string; description?: string; initials?: string }
+  data: { name: string; description?: string; initials?: string },
+  tx?: Prisma.TransactionClient
 ) {
+  const client = tx ?? db;
   const name = data.name.trim();
   const slugBase = slugify(name) || "project";
   const prefix = data.initials
     ? sanitizeTestCasePrefix(data.initials)
     : deriveTestCasePrefix(name);
 
-  return db.project.create({
+  return client.project.create({
     data: {
       name,
       description: data.description?.trim() || null,

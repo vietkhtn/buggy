@@ -1,20 +1,14 @@
-import { randomBytes } from "node:crypto";
-import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { ensureProjectForUser, userHasProjectAccess } from "@/lib/projects";
+import { generateApiKey, hashApiKey } from "@/lib/api-auth";
 
 const createKeySchema = z.object({
   projectId: z.string().min(1).optional(),
   name: z.string().trim().min(1).max(120),
 });
-
-function generateApiKey() {
-  const raw = randomBytes(24).toString("hex");
-  return `buggy_${raw}`;
-}
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -39,6 +33,7 @@ export async function GET(request: Request) {
     select: {
       id: true,
       name: true,
+      scope: true,
       keyPrefix: true,
       createdAt: true,
       lastUsedAt: true,
@@ -66,9 +61,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const rawKey = generateApiKey();
-    const keyHash = await bcrypt.hash(rawKey, 12);
-    const keyPrefix = rawKey.slice(0, 8);
+    const { rawKey, keyPrefix } = generateApiKey();
+    const keyHash = await hashApiKey(rawKey);
 
     await db.apiKey.create({
       data: {
@@ -77,6 +71,7 @@ export async function POST(request: Request) {
         name: payload.name,
         keyHash,
         keyPrefix,
+        scope: "READ_WRITE",
       },
     });
 

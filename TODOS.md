@@ -1,0 +1,81 @@
+# TODOS
+
+Items deferred from `/plan-ceo-review` on 2026-03-24.
+Source plan: v1 REST API — Full CRUD Expansion (21 endpoints).
+
+---
+
+## P2 — Webhooks
+
+**What:** Emit HTTP POST events to a caller-configured URL when key events happen
+(`run.completed`, `test_case.created`, `suite.updated`, etc.), with HMAC-SHA256
+signature verification and retry-with-backoff.
+
+**Why:** Eliminates polling for event-driven integrations. Enables Slack notifications,
+Jira ticket updates, and downstream pipeline triggers without writing polling loops.
+Transforms itgrate from a data store into an event source.
+
+**Where to start:** Add a `Webhook` model to the schema (`projectId`, `url`, `secret`,
+`events: String[]`). Add a `WebhookDelivery` model for delivery tracking. On each
+triggering event, queue a delivery. Delivery worker: HTTP POST with body +
+`X-Itgrate-Signature: sha256=<HMAC>`. Retry up to 3× with exponential backoff.
+
+**Effort:** L (human: ~1 week / CC: ~2 hours)
+**Depends on:** v1 API shipped and in active use
+
+---
+
+## P2 — OpenAPI Spec + Interactive Docs
+
+**What:** Generate `openapi.yaml` from the working v1 implementation (21 endpoints),
+serve an interactive playground at `/api/v1/docs` (Scalar or Swagger UI).
+
+**Why:** Enables SDK auto-generation in any language, gives integrators a testable
+playground, and creates a formal contract for breaking-change detection in CI.
+
+**Where to start:** After endpoints are stable, use `zod-to-openapi` or
+`next-openapi-route-handler` to generate the spec from existing Zod schemas.
+Alternatively, hand-write the spec post-shipping and validate it against live responses.
+
+**Effort:** M (human: ~3 days / CC: ~1 hour)
+**Depends on:** v1 API shipped and stable (all 21 endpoints)
+
+---
+
+## P3 — Rate Limiting
+
+**What:** Cap requests per API key per minute (e.g. 100 req/min) using a Redis-backed
+counter or Vercel edge middleware. Return 429 with a `Retry-After` header on violation.
+
+**Why:** Without rate limiting, a single misbehaving CI pipeline can exhaust the
+Postgres connection pool for all users. API keys are tied to known owners so abuse is
+traceable today, but that's reactive not preventive.
+
+**Where to start:** Evaluate `@upstash/ratelimit` (Redis-based, Vercel-compatible)
+vs an in-process token-bucket counter. The `resolveApiKey()` function in
+`src/lib/api-auth.ts` is the right place to add the check.
+
+**Effort:** M (human: ~1 day / CC: ~30 min)
+**Trigger:** Add when active abuse patterns are observable in production logs.
+
+---
+
+## P3 — Personal Access Tokens (PATs)
+
+**What:** Replace HTTP Basic Auth on `/api/v1/projects` and `/api/v1/api-keys` with
+user-scoped PATs — long-lived tokens independent of the user's password, manageable
+via UI, rotatable without a password change.
+
+**Why:** Basic Auth is tied to login credentials. If itgrate supports team accounts,
+service accounts, or SSO, Basic Auth becomes a security liability (shared email+password
+for CI pipelines). PATs decouple automation credentials from personal logins.
+
+**Where to start:** New `PersonalAccessToken` model (userId, name, tokenHash, scope,
+lastUsedAt, expiresAt). UI in settings panel to create/revoke. Update `resolveBasicAuth`
+to also accept PAT Bearer tokens. Backward-compatible — existing Basic Auth continues
+to work during migration.
+
+**Trigger:** If teams start sharing email+password credentials for CI/CD pipelines,
+that's the signal to prioritize this.
+
+**Effort:** L (human: ~1 week / CC: ~1 hour)
