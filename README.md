@@ -1,68 +1,72 @@
-# Buggy - Test Management for QA Teams
+# Buggy 🐞
 
-Buggy is a self-hosted test management tool that keeps manual and automated test outcomes in one place.
+**The self-hosted test management platform for modern QA teams.**
 
-## Implemented in this build
+Stop juggling spreadsheets and disconnected tools. Buggy brings your manual test cases and automated test results into a single, unified dashboard. It’s built for teams that value privacy, speed, and visibility.
 
-- Email/password authentication with optional Google and GitHub OAuth.
-- Project bootstrap per user (first login automatically gets a project).
-- Manual test case creation (title, module, tags, and initial step).
-- Manual execution workflow (select test cases, start run, set pass/fail/blocked per test result).
-- JUnit XML import endpoint and dashboard upload flow.
-- CI ingestion endpoint: `POST /api/v1/runs` with Bearer API key auth.
-- API key generation UI (key shown once, stored as bcrypt hash).
-- Dashboard metrics:
-  - total results
-  - pass rate
-  - pass/fail/skip+error counts
-  - recent runs
-  - flaky tests across latest 5 automated runs
+---
 
-## Tech stack
+## Why Buggy?
 
-- Next.js App Router + TypeScript
-- Prisma ORM + PostgreSQL
-- NextAuth.js
-- Tailwind CSS + shadcn/ui primitives
+- **Unified Visibility**: See manual and automated results side-by-side. No more fragmented data.
+- **Flaky Test Detection**: Automatically identify unstable tests across your latest 5 runs. Stop chasing ghost failures.
+- **Self-Hosted & Secure**: Your data stays on your infrastructure. No third-party lock-in or privacy concerns.
+- **CI/CD Native**: Ingest results directly from your CI pipeline via REST API or JUnit XML uploads.
 
-## Quick start
+---
 
-1. Copy env file:
+## ⚡️ Key Features
 
+- ✅ **Manual Test Case Management**: Create, organize, and execute manual tests with ease.
+- 🚀 **Automated Run Ingestion**: Use our `POST /api/v1/runs` endpoint with an API key for seamless CI integration.
+- 📊 **Insightful Metrics**: Track pass rates, total results, and historical trends at a glance.
+- 🛠 **Project Scoping**: Multi-tenant architecture with automatic project bootstrapping for new users.
+- 🔑 **Secure API Auth**: Simple API key generation with hashed storage for programmatic access.
+- 📦 **JUnit Support**: Upload standard JUnit XML files directly to populate your dashboard.
+
+---
+
+## 🚀 Quick Start (Recommended)
+
+The fastest way to get Buggy up and running is via **Docker Compose**.
+
+### 1. Clone & Configure
 ```bash
+git clone https://github.com/itgrate/buggy.git && cd buggy
 cp .env.example .env
 ```
+*(Optional: Edit `.env` for OAuth providers or custom secrets)*
 
-2. Start the full stack with Docker Compose:
-
+### 2. Launch the Stack
 ```bash
 docker compose up --build -d
 ```
+This starts:
+- 🐘 **PostgreSQL** on port `5432`
+- ⚡️ **Next.js App** on `http://localhost:3000`
+- 🔄 **Auto-migrations** for your database schema
 
-This now starts:
+### 3. Log In
+Open `http://localhost:3000`. Use email/password or any configured OAuth provider to get started. Your first project will be automatically created!
 
-- `db` (PostgreSQL)
-- `migrate` (runs `prisma db push` once)
-- `app` (Next.js on port 3000)
+---
 
-Open `http://localhost:3000`.
+## 💻 Local Development
 
-3. (Optional) Local development without app container:
+If you prefer to run Buggy natively:
 
-```bash
-npm install
-npx prisma generate
-npx prisma db push
-npm run dev
-```
+1. **Install dependencies**: `npm install`
+2. **Setup DB**: 
+   - Ensure a PostgreSQL instance is running.
+   - Run `npx prisma generate`
+   - Run `npx prisma db push`
+3. **Start Dev Server**: `npm run dev`
 
-## API examples
+---
 
-### Create API key (authenticated session required)
+## 🔌 API Integration
 
-Use the dashboard UI to generate a key.
-
-### Ingest automated run via REST API
+Ingest automated test results from any environment:
 
 ```bash
 curl -X POST http://localhost:3000/api/v1/runs \
@@ -70,26 +74,35 @@ curl -X POST http://localhost:3000/api/v1/runs \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Nightly Build #123",
-    "project_id": "<project_id>",
+    "project_id": "YOUR_PROJECT_ID",
     "results": [
       {
         "name": "Login flow works",
         "suite": "Authentication",
         "status": "passed",
-        "duration_ms": 1234,
-        "metadata": { "browser": "chrome" }
+        "duration_ms": 1234
       }
     ]
   }'
 ```
 
-### Upload JUnit XML
+---
 
-Use the Dashboard "Upload JUnit XML" card.
+## 🏗 Tech Stack
 
-## Verification
+- **Framework**: [Next.js 15+](https://nextjs.org/) (App Router)
+- **Language**: [TypeScript](https://www.typescriptlang.org/)
+- **ORM**: [Prisma](https://www.prisma.io/)
+- **Database**: [PostgreSQL](https://www.postgresql.org/)
+- **Auth**: [NextAuth.js v5](https://authjs.dev/)
+- **Styling**: [Tailwind CSS](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/)
 
-```bash
-npm run lint
-npm run build
-```
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Check our [Contributing Guide](CONTRIBUTING.md) and `AGENTS.md` for coding standards and workflows.
+
+---
+
+*Made with ❤️ for the QA community.*

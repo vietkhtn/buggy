@@ -117,9 +117,10 @@ model TestCase {
   displayId     String
   jiraKey       String?         @db.VarChar(32)
   title         String          @db.VarChar(200)
-  description   String?
-  preconditions String?
-  priority      TestPriority    @default(MEDIUM)
+  description    String?
+  preconditions  String?
+  expectedResult String?
+  priority       TestPriority    @default(MEDIUM)
   status        TestCaseStatus  @default(DRAFT)
   tags          String[]        @default([])
   createdAt     DateTime        @default(now())
