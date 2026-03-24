@@ -177,11 +177,11 @@ function CaseFormFields({
       </div>
 
       <div className="space-y-1">
-        <Label htmlFor="tc-description">Description</Label>
+        <Label htmlFor="tc-description">Test steps</Label>
         <textarea
           id="tc-description"
           name="description"
-          placeholder="Brief description"
+          placeholder="Step-by-step test instructions"
           defaultValue={defaults?.description ?? ""}
           className="h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
@@ -281,6 +281,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
   const [importStep, setImportStep] = useState<"select" | "map">("select");
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── All cases search ─────────────────────────────────────────────────────────
@@ -471,7 +472,12 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
 
   async function handleFileSelect() {
     const file = fileInputRef.current?.files?.[0];
-    if (!file) return;
+    if (!file) {
+      setSelectedFile(null);
+      return;
+    }
+
+    setSelectedFile(file);
 
     try {
       const buffer = await file.arrayBuffer();
@@ -507,9 +513,9 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
 
   async function handleImport(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const file = fileInputRef.current?.files?.[0];
+    const file = selectedFile ?? fileInputRef.current?.files?.[0] ?? null;
     if (!file) { toast.error("Please select a file."); return; }
-    
+
     if (importStep === "select") {
       await handleFileSelect();
       return;
@@ -546,6 +552,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
       setImportStep("select");
       setCsvHeaders([]);
       setColumnMapping({});
+      setSelectedFile(null);
       router.refresh();
     } catch {
       toast.error("Network error during import.", { id: toastId });
@@ -863,7 +870,15 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
       {/* ── Import dialog ── */}
       <Dialog open={showImportDialog} onOpenChange={(open) => {
         setShowImportDialog(open);
-        if (!open) { setImportStep("select"); setCsvHeaders([]); setColumnMapping({}); }
+        if (!open) {
+          setImportStep("select");
+          setCsvHeaders([]);
+          setColumnMapping({});
+          setSelectedFile(null);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+          }
+        }
       }}>
         <DialogContent className={importStep === "map" ? "max-w-2xl" : "max-w-lg"}>
           <DialogHeader>
@@ -888,7 +903,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
               <div className="grid grid-cols-2 gap-x-6 gap-y-4 py-2">
                 {[
                   { id: "title", label: "Title *", required: true },
-                  { id: "description", label: "Description" },
+                  { id: "description", label: "Test Steps" },
                   { id: "module", label: "Module" },
                   { id: "priority", label: "Priority" },
                   { id: "status", label: "Status" },
@@ -931,7 +946,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
                   Back
                 </Button>
               )}
-              <Button type="submit" disabled={importing || (importStep === "select" && !fileInputRef.current?.files?.length)}>
+              <Button type="submit" disabled={importing || (importStep === "select" && !selectedFile)}>
                 {importing ? "Importing…" : importStep === "select" ? "Next" : "Import"}
               </Button>
             </div>
