@@ -35,6 +35,7 @@ type TestCaseItem = {
   status: string;
   description?: string | null;
   preconditions?: string | null;
+  expectedResult?: string | null;
   tags?: string[];
   jiraKey?: string | null;
 };
@@ -195,6 +196,17 @@ function CaseFormFields({
           name="description"
           placeholder="Step-by-step test instructions"
           defaultValue={defaults?.description ?? ""}
+          className="h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <Label htmlFor="tc-expected-result">Expected result</Label>
+        <textarea
+          id="tc-expected-result"
+          name="expectedResult"
+          placeholder="e.g. User is redirected to the dashboard"
+          defaultValue={defaults?.expectedResult ?? ""}
           className="h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       </div>
@@ -370,6 +382,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
       title: String(formData.get("title") ?? "").trim(),
       description: String(formData.get("description") ?? "").trim() || undefined,
       preconditions: String(formData.get("preconditions") ?? "").trim() || undefined,
+      expectedResult: String(formData.get("expectedResult") ?? "").trim() || undefined,
       moduleName: String(formData.get("module") ?? "").trim() || undefined,
       tags: String(formData.get("tags") ?? "")
         .split(",")

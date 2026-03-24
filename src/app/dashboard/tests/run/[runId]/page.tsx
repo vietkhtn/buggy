@@ -27,6 +27,7 @@ export default async function ActiveRunPage({
               title: true,
               description: true,
               preconditions: true,
+              expectedResult: true,
               priority: true,
               module: { select: { name: true } },
             },
@@ -56,6 +57,7 @@ export default async function ActiveRunPage({
             title: r.testCase.title,
             description: r.testCase.description,
             preconditions: r.testCase.preconditions,
+            expectedResult: r.testCase.expectedResult,
             priority: r.testCase.priority,
             module: r.testCase.module,
           }

@@ -17,6 +17,7 @@ type RunResult = {
     title: string;
     description: string | null;
     preconditions: string | null;
+    expectedResult: string | null;
     priority: string;
     module: { name: string } | null;
   } | null;
@@ -224,12 +225,24 @@ export function ActiveRunPanel({ run: initialRun }: { run: Run }) {
 
                 {/* Test steps */}
                 {result.testCase?.description && (
-                  <div className="mb-4 rounded-lg border border-border/60 px-3 py-2.5">
+                  <div className="mb-3 rounded-lg border border-border/60 px-3 py-2.5">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">
                       Test steps
                     </p>
                     <p className="text-sm whitespace-pre-wrap leading-relaxed">
                       {result.testCase.description}
+                    </p>
+                  </div>
+                )}
+
+                {/* Expected result */}
+                {result.testCase?.expectedResult && (
+                  <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">
+                      Expected result
+                    </p>
+                    <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                      {result.testCase.expectedResult}
                     </p>
                   </div>
                 )}

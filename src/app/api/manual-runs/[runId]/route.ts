@@ -27,6 +27,7 @@ export async function GET(
               title: true,
               description: true,
               preconditions: true,
+              expectedResult: true,
               priority: true,
               module: { select: { name: true } },
             },

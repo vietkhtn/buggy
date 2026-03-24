@@ -32,7 +32,7 @@ The fastest way to get Buggy up and running is via **Docker Compose**.
 
 ### 1. Clone & Configure
 ```bash
-git clone https://github.com/itgrate/buggy.git && cd buggy
+git clone https://github.com/pdnhan/buggy.git && cd buggy
 cp .env.example .env
 ```
 *(Optional: Edit `.env` for OAuth providers or custom secrets)*
