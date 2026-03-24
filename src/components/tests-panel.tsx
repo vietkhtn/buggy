@@ -2,7 +2,6 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -536,13 +535,18 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
     setSelectedFile(file);
 
     try {
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: "array" });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as unknown[][];
+      let headers: string[] = [];
+      const ext = file.name.split(".").pop()?.toLowerCase();
 
-      if (rows.length > 0) {
-        const headers = rows[0].map(h => String(h ?? "").trim()).filter(Boolean);
+      if (ext === "csv") {
+        // Parse CSV headers from first line using native browser APIs
+        const text = await file.text();
+        const firstLine = text.split(/\r?\n/)[0] ?? "";
+        headers = firstLine.split(",").map(h => h.replace(/^["']|["']$/g, "").trim()).filter(Boolean);
+      }
+      // For xlsx: header detection is not available in-browser; user maps manually
+
+      if (headers.length > 0) {
         setCsvHeaders(headers);
 
         // Initial smart mapping
@@ -963,7 +967,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
             <DialogTitle>Import test cases</DialogTitle>
             <DialogDescription>
               {importStep === "select" 
-                ? "Upload an Excel (.xlsx, .xls) or CSV file. You will be able to map columns in the next step."
+                ? "Upload an Excel (.xlsx) or CSV file. You will be able to map columns in the next step."
                 : "Map your file columns to the internal test case fields."}
             </DialogDescription>
           </DialogHeader>
@@ -973,7 +977,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".xlsx,.xls,.csv"
+                accept=".xlsx,.csv"
                 onChange={handleFileSelect}
                 className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:bg-muted file:text-foreground hover:file:bg-muted/80"
               />

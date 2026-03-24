@@ -1,19 +1,72 @@
+import { Readable } from "node:stream";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { ensureProjectForUser, userHasProjectAccess } from "@/lib/projects";
 import { reserveTestCaseDisplayIds } from "@/lib/test-case-ids";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 // ─── POST /api/test-cases/import ──────────────────────────────────────────────
 // Accepts multipart/form-data with:
-//   file      – .xlsx, .xls, or .csv
+//   file      – .xlsx or .csv
 //   projectId – optional, uses default project when omitted
 //
 // Expected columns (case-insensitive, order flexible):
 //   title (required), description, module, priority, status, tags,
 //   preconditions, jira (optional reference key)
+
+function cellValue(cell: ExcelJS.Cell): string {
+  const v = cell.value;
+  if (v === null || v === undefined) return "";
+  // Formula cells expose { formula, result }
+  if (typeof v === "object" && "result" in v) {
+    const res = (v as { result: unknown }).result;
+    return res === null || res === undefined ? "" : String(res);
+  }
+  if (v instanceof Date) return v.toISOString();
+  return String(v);
+}
+
+async function parseWorkbook(data: ArrayBuffer, filename: string): Promise<Record<string, unknown>[]> {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  const workbook = new ExcelJS.Workbook();
+
+  if (ext === "csv") {
+    const stream = Readable.from(Buffer.from(data));
+    await workbook.csv.read(stream);
+  } else if (ext === "xlsx") {
+    // exceljs accepts ArrayBuffer at runtime even though typedefs say Buffer
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await workbook.xlsx.load(data as any);
+  } else {
+    throw new Error(`Unsupported file type '.${ext}'. Upload a .xlsx or .csv file.`);
+  }
+
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) return [];
+
+  const headers: string[] = [];
+  const rows: Record<string, unknown>[] = [];
+
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) {
+      row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+        headers[colNumber - 1] = cellValue(cell).trim();
+      });
+      return;
+    }
+    const rowData: Record<string, unknown> = {};
+    headers.forEach((header, idx) => {
+      if (header) {
+        rowData[header] = cellValue(row.getCell(idx + 1));
+      }
+    });
+    rows.push(rowData);
+  });
+
+  return rows;
+}
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -23,7 +76,15 @@ export async function POST(request: Request) {
   const file = formData.get("file") as File | null;
   const requestedProjectId = formData.get("projectId") as string | null;
   const mappingRaw = formData.get("mapping") as string | null;
-  const mapping = mappingRaw ? JSON.parse(mappingRaw) as Record<string, string> : null;
+
+  let mapping: Record<string, string> | null = null;
+  if (mappingRaw) {
+    try {
+      mapping = JSON.parse(mappingRaw) as Record<string, string>;
+    } catch {
+      return NextResponse.json({ error: "Invalid mapping JSON." }, { status: 400 });
+    }
+  }
 
   if (!file) return NextResponse.json({ error: "No file provided." }, { status: 400 });
 
@@ -35,10 +96,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const workbook = XLSX.read(buffer, { type: "buffer" });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+  let rows: Record<string, unknown>[];
+  try {
+    rows = await parseWorkbook(await file.arrayBuffer(), file.name);
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Unable to parse file." },
+      { status: 400 }
+    );
+  }
 
   if (rows.length === 0) {
     return NextResponse.json({ error: "File contains no data rows." }, { status: 400 });
@@ -48,14 +114,12 @@ export async function POST(request: Request) {
   const normalised = rows.map((row) => {
     const out: Record<string, string> = {};
     if (mapping) {
-      // Use explicit mapping from user
       for (const [targetField, csvHeader] of Object.entries(mapping)) {
         if (csvHeader) {
           out[targetField] = String(row[csvHeader] ?? "").trim();
         }
       }
     } else {
-      // Auto-detect by normalising header names
       for (const [k, v] of Object.entries(row)) {
         out[k.toLowerCase().replace(/\s+/g, "")] = String(v ?? "").trim();
       }
