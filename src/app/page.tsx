@@ -22,7 +22,7 @@ export default async function Home() {
         </div>
         <div className="flex items-center gap-6">
           <a
-            href="https://github.com/pdnhan/itgrate-test-management"
+            href="https://github.com/pdnhan/buggy"
             className="hidden text-sm text-slate-400 transition hover:text-slate-100 sm:block"
             target="_blank"
             rel="noopener noreferrer"
@@ -85,7 +85,7 @@ export default async function Home() {
               Create free account
             </Link>
             <a
-              href="https://github.com/pdnhan/itgrate-test-management"
+              href="https://github.com/pdnhan/buggy"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center rounded-lg border border-white/15 px-6 py-2.5 text-sm font-medium transition hover:border-white/35"
@@ -250,7 +250,7 @@ export default async function Home() {
             {[
               {
                 label: "GitHub",
-                href: "https://github.com/pdnhan/itgrate-test-management",
+                href: "https://github.com/pdnhan/buggy",
               },
               { label: "Docs", href: "#" },
               { label: "API reference", href: "#" },
