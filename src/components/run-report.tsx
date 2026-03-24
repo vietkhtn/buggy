@@ -14,6 +14,7 @@ type ReportResult = {
     title: string;
     description: string | null;
     preconditions: string | null;
+    expectedResult: string | null;
     priority: string;
     module: { name: string } | null;
   } | null;
@@ -185,6 +186,16 @@ export function RunReport({ run, backUrl = "/dashboard" }: { run: ReportRun; bac
                       </p>
                     </div>
                   )}
+                  {result.testCase?.expectedResult && (
+                    <div className="mt-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                        Expected result
+                      </p>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                        {result.testCase.expectedResult}
+                      </p>
+                    </div>
+                  )}
                   {result.notes && (
                     <div className="mt-3 rounded-lg bg-destructive/10 px-4 py-3">
                       <p className="text-xs font-bold uppercase tracking-widest text-destructive mb-1.5">
@@ -216,6 +227,9 @@ export function RunReport({ run, backUrl = "/dashboard" }: { run: ReportRun; bac
                     Status
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Expected result
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Actual result
                   </th>
                 </tr>
@@ -234,6 +248,9 @@ export function RunReport({ run, backUrl = "/dashboard" }: { run: ReportRun; bac
                     </td>
                     <td className={`px-4 py-3 text-xs font-bold ${STATUS_COLOR[result.status] ?? "text-muted-foreground"}`}>
                       {STATUS_LABEL[result.status] ?? result.status}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">
+                      {result.testCase?.expectedResult ?? <span className="text-muted-foreground/40">—</span>}
                     </td>
                     <td className="px-4 py-3 text-sm text-muted-foreground">
                       {result.notes ?? <span className="text-muted-foreground/40">—</span>}
