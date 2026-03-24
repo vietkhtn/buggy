@@ -2,9 +2,9 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { userHasProjectAccess } from "@/lib/projects";
-import { ActiveRunPanel } from "@/components/active-run-panel";
+import { RunReport } from "@/components/run-report";
 
-export default async function ActiveRunPage({
+export default async function RunReportPage({
   params,
 }: {
   params: Promise<{ runId: string }>;
@@ -22,12 +22,10 @@ export default async function ActiveRunPage({
         include: {
           testCase: {
             select: {
-              id: true,
               displayId: true,
               title: true,
               description: true,
               preconditions: true,
-              expectedResult: true,
               priority: true,
               module: { select: { name: true } },
             },
@@ -39,17 +37,17 @@ export default async function ActiveRunPage({
 
   if (!run || run.source !== "MANUAL") redirect("/dashboard/tests");
   if (!(await userHasProjectAccess(session.user.id, run.projectId))) redirect("/dashboard/tests");
-  if (run.status === "COMPLETED") redirect(`/report/runs/${runId}`);
 
   const serialized = {
     id: run.id,
     name: run.name,
     status: run.status,
     startedAt: run.startedAt.toISOString(),
+    completedAt: run.completedAt?.toISOString() ?? null,
     results: run.results.map((r) => ({
       id: r.id,
       name: r.name,
-      status: r.status as "PASSED" | "FAILED" | "SKIPPED" | "ERROR" | "BLOCKED",
+      status: r.status,
       notes: r.notes,
       testCase: r.testCase
         ? {
@@ -57,7 +55,6 @@ export default async function ActiveRunPage({
             title: r.testCase.title,
             description: r.testCase.description,
             preconditions: r.testCase.preconditions,
-            expectedResult: r.testCase.expectedResult,
             priority: r.testCase.priority,
             module: r.testCase.module,
           }
@@ -67,7 +64,7 @@ export default async function ActiveRunPage({
 
   return (
     <main>
-      <ActiveRunPanel run={serialized} />
+      <RunReport run={serialized} />
     </main>
   );
 }

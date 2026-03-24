@@ -299,6 +299,11 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
   const [deleteTarget, setDeleteTarget] = useState<TestCaseItem | null>(null);
   const [deletingCase, setDeletingCase] = useState(false);
 
+  // ── Bulk selection ───────────────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
   // ── Import ───────────────────────────────────────────────────────────────────
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -492,6 +497,31 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
     } finally {
       setDeletingCase(false);
     }
+  }
+
+  // ─── Bulk delete ─────────────────────────────────────────────────────────────
+
+  async function confirmBulkDelete() {
+    setBulkDeleting(true);
+    const ids = Array.from(selectedIds);
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        const res = await fetch(`/api/test-cases/${id}`, { method: "DELETE" });
+        if (!res.ok) failed++;
+      } catch {
+        failed++;
+      }
+    }
+    setBulkDeleting(false);
+    setShowBulkDeleteDialog(false);
+    setSelectedIds(new Set());
+    if (failed > 0) {
+      toast.error(`${failed} case${failed !== 1 ? "s" : ""} could not be deleted.`);
+    } else {
+      toast.success(`${ids.length} test case${ids.length !== 1 ? "s" : ""} deleted.`);
+    }
+    router.refresh();
   }
 
   // ─── Import ──────────────────────────────────────────────────────────────────
@@ -895,6 +925,26 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
         </DialogContent>
       </Dialog>
 
+      {/* ── Bulk delete confirm dialog ── */}
+      <Dialog open={showBulkDeleteDialog} onOpenChange={(open) => { if (!open) setShowBulkDeleteDialog(false); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete {selectedIds.size} test case{selectedIds.size !== 1 ? "s" : ""}?</DialogTitle>
+            <DialogDescription>
+              This will permanently delete {selectedIds.size} test case{selectedIds.size !== 1 ? "s" : ""}. Historical run data remains untouched.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={() => setShowBulkDeleteDialog(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" disabled={bulkDeleting} onClick={confirmBulkDelete}>
+              {bulkDeleting ? "Deleting…" : `Delete ${selectedIds.size}`}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Import dialog ── */}
       <Dialog open={showImportDialog} onOpenChange={(open) => {
         setShowImportDialog(open);
@@ -1223,13 +1273,38 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
         {/* ── All cases tab ── */}
         <TabsContent value="cases">
           <div className="space-y-4">
-            <Input
-              type="search"
-              placeholder="Search by title or module…"
-              value={caseSearch}
-              onChange={(e) => setCaseSearch(e.target.value)}
-              className="max-w-sm"
-            />
+            <div className="flex items-center gap-3">
+              <Input
+                type="search"
+                placeholder="Search by title or module…"
+                value={caseSearch}
+                onChange={(e) => setCaseSearch(e.target.value)}
+                className="max-w-sm"
+              />
+              {selectedIds.size > 0 && (
+                <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-1.5 text-sm">
+                  <span className="font-medium text-destructive">{selectedIds.size} selected</span>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="h-7 px-2.5 text-xs"
+                    onClick={() => setShowBulkDeleteDialog(true)}
+                  >
+                    Delete selected
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIds(new Set())}
+                    className="ml-1 rounded p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                    title="Clear selection"
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+            </div>
 
             {filteredCases.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border bg-muted/30 p-10 text-center">
@@ -1253,6 +1328,21 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/40">
+                      <th className="w-10 px-3 py-2.5">
+                        <input
+                          type="checkbox"
+                          className="rounded border-border"
+                          checked={filteredCases.length > 0 && filteredCases.every((tc) => selectedIds.has(tc.id))}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedIds(new Set(filteredCases.map((tc) => tc.id)));
+                            } else {
+                              setSelectedIds(new Set());
+                            }
+                          }}
+                          aria-label="Select all"
+                        />
+                      </th>
                       <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Case ID</th>
                       <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Title</th>
                       <th className="hidden px-4 py-2.5 text-left text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground sm:table-cell">Module</th>
@@ -1264,7 +1354,21 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
                   </thead>
                   <tbody className="divide-y divide-border bg-card">
                     {filteredCases.map((tc) => (
-                      <tr key={tc.id} className="hover:bg-muted/30 transition-colors">
+                      <tr key={tc.id} className={`hover:bg-muted/30 transition-colors${selectedIds.has(tc.id) ? " bg-muted/20" : ""}`}>
+                        <td className="w-10 px-3 py-3">
+                          <input
+                            type="checkbox"
+                            className="rounded border-border"
+                            checked={selectedIds.has(tc.id)}
+                            onChange={(e) => {
+                              const next = new Set(selectedIds);
+                              if (e.target.checked) next.add(tc.id);
+                              else next.delete(tc.id);
+                              setSelectedIds(next);
+                            }}
+                            aria-label={`Select ${tc.displayId}`}
+                          />
+                        </td>
                         <td className="px-4 py-3 font-semibold tabular-nums">{tc.displayId}</td>
                         <td className="px-4 py-3">
                           <div className="font-medium">{tc.title}</div>
@@ -1637,7 +1741,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
                       )}
                       <span className="text-muted-foreground">{passRate}%</span>
                     </div>
-                    <a href={`/dashboard/tests/run/${run.id}/report`}>
+                    <a href={`/report/runs/${run.id}`}>
                       <Button variant="outline" size="sm">
                         View report
                       </Button>

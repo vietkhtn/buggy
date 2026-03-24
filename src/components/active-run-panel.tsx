@@ -91,7 +91,7 @@ export function ActiveRunPanel({ run: initialRun }: { run: Run }) {
     setCompleting(true);
     try {
       await fetch(`/api/manual-runs/${initialRun.id}`, { method: "PATCH" });
-      router.push(`/dashboard/tests/run/${initialRun.id}/report`);
+      router.push(`/report/runs/${initialRun.id}`);
     } finally {
       setCompleting(false);
     }
