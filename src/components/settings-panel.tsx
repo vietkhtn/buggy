@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Dialog,
@@ -27,13 +28,15 @@ type ApiKeyItem = {
 
 type Props = {
   projectId: string;
+  projectName: string;
+  projectDescription: string;
   testCasePrefix: string;
   apiKeys: ApiKeyItem[];
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function SettingsPanel({ projectId, apiKeys, testCasePrefix }: Props) {
+export function SettingsPanel({ projectId, projectName, projectDescription, apiKeys, testCasePrefix }: Props) {
   const router = useRouter();
 
   const [creatingKey, setCreatingKey] = useState(false);
@@ -45,6 +48,10 @@ export function SettingsPanel({ projectId, apiKeys, testCasePrefix }: Props) {
   const [prefix, setPrefix] = useState(testCasePrefix);
   const [updatingPrefix, setUpdatingPrefix] = useState(false);
   const [prefixError, setPrefixError] = useState<string | null>(null);
+  const [name, setName] = useState(projectName);
+  const [description, setDescription] = useState(projectDescription);
+  const [updatingProject, setUpdatingProject] = useState(false);
+  const [projectError, setProjectError] = useState<string | null>(null);
 
   // ─── Create API key ─────────────────────────────────────────────────────────
 
@@ -187,6 +194,33 @@ export function SettingsPanel({ projectId, apiKeys, testCasePrefix }: Props) {
     }
   }
 
+  async function updateProject(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setUpdatingProject(true);
+    setProjectError(null);
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}/settings`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), description: description.trim() }),
+      });
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        setProjectError(body.error ?? "Unable to update project.");
+        return;
+      }
+
+      toast.success("Project updated.");
+      router.refresh();
+    } catch {
+      setProjectError("Network error — changes not saved.");
+    } finally {
+      setUpdatingProject(false);
+    }
+  }
+
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -247,6 +281,47 @@ export function SettingsPanel({ projectId, apiKeys, testCasePrefix }: Props) {
       </Dialog>
 
       <div className="space-y-8">
+        {/* ── Project Info ── */}
+        <Card>
+          <CardHeader className="pb-3">
+            <h2 className="text-base font-semibold">Project details</h2>
+            <p className="text-sm text-muted-foreground">
+              Update the project name and description.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <form className="flex flex-col gap-3" onSubmit={updateProject}>
+              <div className="space-y-1">
+                <Label htmlFor="project-name">Name</Label>
+                <Input
+                  id="project-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  maxLength={80}
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="project-description">Description</Label>
+                <Textarea
+                  id="project-description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  maxLength={500}
+                  rows={3}
+                  placeholder="Brief description of what this project covers…"
+                />
+              </div>
+              {projectError && <p className="text-xs text-destructive">{projectError}</p>}
+              <div>
+                <Button type="submit" disabled={updatingProject} size="sm">
+                  {updatingProject ? "Saving…" : "Save"}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+
         {/* ── Test Case ID Prefix ── */}
         <Card>
           <CardHeader className="pb-3">

@@ -645,7 +645,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
       toast.success("Manual run started.", { id: toastId });
       setSelectedCases([]);
       setSelectedSuiteId(null);
-      router.push(`/dashboard/tests/run/${runId}`);
+      router.push(`/dashboard/${projectId}/tests/run/${runId}`);
     } catch {
       toast.error("Network error — run not started.", { id: toastId });
     } finally {
@@ -1555,7 +1555,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
                     {activeManualRun.results.length} tested
                   </p>
                 </div>
-                <a href={`/dashboard/tests/run/${activeManualRun.id}`}>
+                <a href={`/dashboard/${projectId}/tests/run/${activeManualRun.id}`}>
                   <Button>
                     Continue testing
                     <svg

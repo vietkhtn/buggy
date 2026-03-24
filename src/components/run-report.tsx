@@ -26,6 +26,7 @@ type ReportRun = {
   startedAt: string;
   completedAt: string | null;
   results: ReportResult[];
+  projectName?: string;
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -46,7 +47,7 @@ const STATUS_COLOR: Record<string, string> = {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function RunReport({ run }: { run: ReportRun }) {
+export function RunReport({ run, backUrl = "/dashboard" }: { run: ReportRun; backUrl?: string }) {
   const passed = run.results.filter((r) => r.status === "PASSED").length;
   const failed = run.results.filter((r) => r.status === "FAILED").length;
   const skipped = run.results.filter((r) => r.status === "SKIPPED" || r.status === "BLOCKED").length;
@@ -74,7 +75,7 @@ export function RunReport({ run }: { run: ReportRun }) {
         {/* ── Toolbar (hidden in print) ── */}
         <div className="no-print mb-6 flex items-center justify-between gap-4">
           <a
-            href="/dashboard/tests"
+            href={backUrl}
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -92,7 +93,9 @@ export function RunReport({ run }: { run: ReportRun }) {
 
         {/* ── Report header ── */}
         <div className="mb-8">
-          <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Test run report</p>
+          <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+            {run.projectName ? `${run.projectName} · ` : ""}Test run report
+          </p>
           <h1 className="mt-1 text-3xl font-bold">{run.name}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{completedDate}</p>
         </div>

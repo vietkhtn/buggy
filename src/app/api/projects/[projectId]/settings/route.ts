@@ -5,14 +5,21 @@ import { db } from "@/lib/db";
 import { userHasProjectAccess } from "@/lib/projects";
 import { sanitizeTestCasePrefix } from "@/lib/test-case-ids";
 
-const updateSchema = z.object({
-  testCasePrefix: z
-    .string()
-    .trim()
-    .min(2)
-    .max(6)
-    .regex(/^[A-Z0-9]+$/i, { message: "Prefix must be alphanumeric." }),
-});
+const updateSchema = z
+  .object({
+    testCasePrefix: z
+      .string()
+      .trim()
+      .min(2)
+      .max(6)
+      .regex(/^[A-Z0-9]+$/i, { message: "Prefix must be alphanumeric." })
+      .optional(),
+    name: z.string().trim().min(1).max(80).optional(),
+    description: z.string().trim().max(500).optional(),
+  })
+  .refine((v) => v.testCasePrefix || v.name || v.description !== undefined, {
+    message: "At least one field must be provided.",
+  });
 
 export async function PATCH(
   request: Request,
@@ -29,12 +36,22 @@ export async function PATCH(
 
   try {
     const payload = updateSchema.parse(await request.json());
-    const normalized = sanitizeTestCasePrefix(payload.testCasePrefix);
+    const updateData: Record<string, unknown> = {};
+
+    if (payload.testCasePrefix) {
+      updateData.testCasePrefix = sanitizeTestCasePrefix(payload.testCasePrefix);
+    }
+    if (payload.name) {
+      updateData.name = payload.name;
+    }
+    if (payload.description !== undefined) {
+      updateData.description = payload.description || null;
+    }
 
     const project = await db.project.update({
       where: { id: projectId },
-      data: { testCasePrefix: normalized },
-      select: { id: true, testCasePrefix: true },
+      data: updateData,
+      select: { id: true, name: true, description: true, testCasePrefix: true },
     });
 
     return NextResponse.json({ project });
