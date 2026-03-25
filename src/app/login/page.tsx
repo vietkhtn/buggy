@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [showRegistrationSuccess] = useState(() => {
     if (typeof window === "undefined") return false;
     const params = new URLSearchParams(window.location.search);
@@ -80,9 +81,7 @@ export default function LoginPage() {
             <button
               type="button"
               className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
-              onClick={() =>
-                alert("Please contact your admin to reset your password.")
-              }
+              onClick={() => setShowForgotPassword(true)}
             >
               Forgot password?
             </button>
@@ -97,6 +96,11 @@ export default function LoginPage() {
           />
         </div>
 
+        {showForgotPassword && (
+          <p className="rounded-lg border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+            Contact your administrator to reset your password.
+          </p>
+        )}
         {error ? <p className="text-sm text-red-500">{error}</p> : null}
 
         <button
