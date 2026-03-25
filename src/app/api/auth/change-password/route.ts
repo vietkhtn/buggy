@@ -5,6 +5,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
+import { ensureProjectForUser } from "@/lib/projects";
 
 const changePasswordSchema = z.object({
   password: z.string().min(8).max(128),
@@ -27,6 +28,10 @@ export async function PATCH(request: Request) {
       where: { id: session.user.id },
       data: { password: passwordHash, mustChangePassword: false },
     });
+
+    // Ensure new users get a project on first sign-in (invited users never
+    // reach /dashboard directly — they're intercepted here first).
+    await ensureProjectForUser(session.user.id);
 
     return NextResponse.json({ ok: true });
   } catch (error) {

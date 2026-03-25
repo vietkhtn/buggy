@@ -17,6 +17,10 @@ vi.mock("@/lib/password", () => ({
   hashPassword: vi.fn().mockResolvedValue("hashed"),
 }));
 
+vi.mock("@/lib/projects", () => ({
+  ensureProjectForUser: vi.fn().mockResolvedValue(null),
+}));
+
 import { PATCH } from "./route";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";

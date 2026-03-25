@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { signOut } from "next-auth/react";
+import { signIn } from "next-auth/react";
 
-export default function ChangePasswordForm() {
+export default function ChangePasswordForm({ email }: { email: string }) {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -46,8 +46,10 @@ export default function ChangePasswordForm() {
         return;
       }
 
-      await signOut({ redirect: false });
-      router.push("/login?changed=1");
+      // Re-authenticate with the new password so the JWT reflects
+      // mustChangePassword: false, then go straight to the dashboard.
+      await signIn("credentials", { email, password, redirect: false });
+      router.push("/dashboard");
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -58,7 +60,7 @@ export default function ChangePasswordForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="password" className="block text-sm font-medium mb-1">
           New password
         </label>
         <input
@@ -69,11 +71,11 @@ export default function ChangePasswordForm() {
           required
           minLength={8}
           maxLength={128}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2"
         />
       </div>
       <div>
-        <label htmlFor="confirm" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="confirm" className="block text-sm font-medium mb-1">
           Confirm new password
         </label>
         <input
@@ -84,14 +86,14 @@ export default function ChangePasswordForm() {
           required
           minLength={8}
           maxLength={128}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2"
         />
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-500">{error}</p>}
       <button
         type="submit"
         disabled={submitting}
-        className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+        className="w-full rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {submitting ? "Saving…" : "Set password"}
       </button>
