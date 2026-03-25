@@ -32,7 +32,7 @@ function Switch({
         "relative inline-flex min-h-[28px] min-w-[44px] cursor-pointer items-center rounded-full border-2 border-transparent transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         "disabled:cursor-not-allowed disabled:opacity-50",
-        "data-[state=checked]:bg-primary data-[state=unchecked]:bg-input",
+        "data-checked:bg-primary data-unchecked:bg-input",
         className
       )}
       {...props}
@@ -40,7 +40,7 @@ function Switch({
       <SwitchPrimitive.Thumb
         className={cn(
           "pointer-events-none block h-5 w-5 rounded-full bg-background shadow-sm ring-0 transition-transform",
-          "data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0"
+          "data-checked:translate-x-4 data-unchecked:translate-x-0"
         )}
       />
     </SwitchPrimitive.Root>
