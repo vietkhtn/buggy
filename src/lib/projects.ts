@@ -35,9 +35,10 @@ export async function ensureProjectForUser(userId: string) {
       select: { id: true, name: true, email: true },
     });
 
-    // If user doesn't exist, throw a descriptive error
+    // If user doesn't exist, the session is stale — return null so the caller
+    // can redirect to login rather than crashing the Server Component.
     if (!user) {
-      throw new Error(`User not found for ID: ${userId}. Cannot create project.`);
+      return null;
     }
 
     // Create default project for user

@@ -11,8 +11,12 @@ export default async function ProjectsPage() {
     redirect("/login");
   }
 
-  // Ensure the user has at least one project
-  await ensureProjectForUser(session.user.id);
+  // Ensure the user has at least one project.
+  // Returns null if the session user no longer exists in the DB (stale JWT).
+  const ensured = await ensureProjectForUser(session.user.id);
+  if (!ensured) {
+    redirect("/login");
+  }
 
   const projects = await getUserProjects(session.user.id);
 
