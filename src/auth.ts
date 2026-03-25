@@ -59,9 +59,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id;
-        token.isWorkspaceAdmin = (user as any).isWorkspaceAdmin ?? false;
-        token.mustChangePassword = (user as any).mustChangePassword ?? false;
+        token.id = user.id as string;
+        token.isWorkspaceAdmin = user.isWorkspaceAdmin ?? false;
+        token.mustChangePassword = user.mustChangePassword ?? false;
       }
       return token;
     },

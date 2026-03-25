@@ -10,6 +10,7 @@ declare module "next-auth/jwt" {
 
 declare module "next-auth" {
   interface User {
+    isWorkspaceAdmin?: boolean;
     mustChangePassword?: boolean;
   }
   interface Session {
