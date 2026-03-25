@@ -314,7 +314,7 @@ export function SettingsPanel({ projectId, projectName, projectDescription, apiK
               </div>
               {projectError && <p className="text-xs text-destructive">{projectError}</p>}
               <div>
-                <Button type="submit" disabled={updatingProject} size="sm">
+                <Button type="submit" disabled={updatingProject}>
                   {updatingProject ? "Saving…" : "Save"}
                 </Button>
               </div>
@@ -349,7 +349,7 @@ export function SettingsPanel({ projectId, projectName, projectDescription, apiK
                 {prefixError && <p className="text-xs text-destructive">{prefixError}</p>}
               </div>
               <div>
-                <Button type="submit" disabled={updatingPrefix} size="sm">
+                <Button type="submit" disabled={updatingPrefix}>
                   {updatingPrefix ? "Saving…" : "Save prefix"}
                 </Button>
               </div>
@@ -426,13 +426,14 @@ export function SettingsPanel({ projectId, projectName, projectDescription, apiK
         </Card>
 
         {/* ── JUnit Import (secondary) ── */}
-        <div className="rounded-xl border border-dashed border-border p-5">
-          <div className="mb-4">
-            <h3 className="text-sm font-medium">Import JUnit XML</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+        <Card>
+          <CardHeader className="pb-3">
+            <h2 className="text-base font-semibold">Import JUnit XML</h2>
+            <p className="text-sm text-muted-foreground">
               Manually upload an automated test run from a JUnit XML file (max 50 MB).
             </p>
-          </div>
+          </CardHeader>
+          <CardContent>
           <form className="flex flex-wrap items-end gap-3" onSubmit={uploadJUnit}>
             <div className="min-w-36 flex-1 space-y-1">
               <Label htmlFor="junit-name" className="text-xs">
@@ -444,7 +445,7 @@ export function SettingsPanel({ projectId, projectName, projectDescription, apiK
                 type="text"
                 defaultValue={`Run ${new Date().toLocaleDateString()}`}
                 placeholder="e.g. Nightly Build #42"
-                className="h-8 text-sm"
+                className="h-9 text-sm"
               />
             </div>
             <div className="min-w-48 flex-1 space-y-1">
@@ -457,14 +458,15 @@ export function SettingsPanel({ projectId, projectName, projectDescription, apiK
                 type="file"
                 required
                 accept=".xml,text/xml,application/xml"
-                className="h-8 text-sm"
+                className="h-9 text-sm"
               />
             </div>
-            <Button type="submit" disabled={uploading} variant="outline" size="sm">
+            <Button type="submit" disabled={uploading} variant="outline">
               {uploading ? "Importing…" : "Import"}
             </Button>
           </form>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </>
   );
