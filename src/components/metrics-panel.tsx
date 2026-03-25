@@ -96,18 +96,21 @@ function MetricCard({
   description: string;
   highlight?: "good" | "warn" | "bad" | null;
 }) {
-  const highlightClass =
+  const dotColor =
     highlight === "good"
-      ? "border-l-4 border-l-[var(--success)]"
+      ? "bg-[var(--success)]"
       : highlight === "warn"
-      ? "border-l-4 border-l-[var(--warning)]"
+      ? "bg-[var(--warning)]"
       : highlight === "bad"
-      ? "border-l-4 border-l-destructive"
-      : "";
+      ? "bg-destructive"
+      : null;
 
   return (
-    <div className={`rounded-xl border border-border bg-card p-5 ${highlightClass}`}>
-      <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">{title}</p>
+    <div className="rounded-xl border border-border bg-card p-5">
+      <div className="flex items-center gap-1.5">
+        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">{title}</p>
+        {dotColor && <span className={`h-1.5 w-1.5 rounded-full ${dotColor}`} aria-hidden="true" />}
+      </div>
       <p className="mt-1 text-3xl font-semibold tabular-nums">{value}</p>
       <p className="mt-1 text-xs text-muted-foreground">{description}</p>
     </div>
