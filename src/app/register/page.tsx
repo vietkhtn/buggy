@@ -53,6 +53,14 @@ export default function RegisterPage() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-6 py-12">
+      <div className="mb-8 flex items-center gap-2">
+        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-foreground">
+          <svg className="h-4 w-4 text-background" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <span className="text-sm font-bold tracking-tight">Buggy</span>
+      </div>
       <h1 className="text-3xl font-semibold">Create your account</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         Start managing manual and automated tests in one workspace.
