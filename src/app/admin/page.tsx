@@ -6,7 +6,7 @@ import { AdminUsersClient } from "./users-client";
 export default async function AdminPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  if (!session.user.isWorkspaceAdmin) redirect("/dashboard");
+  if (!session.user.isWorkspaceAdmin) redirect("/dashboard?notice=admin-required");
 
   const users = await db.user.findMany({
     select: {
