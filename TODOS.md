@@ -53,7 +53,8 @@ traceable today, but that's reactive not preventive.
 
 **Where to start:** Evaluate `@upstash/ratelimit` (Redis-based, Vercel-compatible)
 vs an in-process token-bucket counter. The `resolveApiKey()` function in
-`src/lib/api-auth.ts` is the right place to add the check.
+`src/lib/api-auth.ts` is the right place for public API checks. Also apply to
+`/api/admin/*` routes (scope: admin-only, so lower urgency than public API).
 
 **Effort:** M (human: ~1 day / CC: ~30 min)
 **Trigger:** Add when active abuse patterns are observable in production logs.
@@ -79,3 +80,24 @@ to work during migration.
 that's the signal to prioritize this.
 
 **Effort:** L (human: ~1 week / CC: ~1 hour)
+
+---
+
+## P3 — Admin API JWT Re-validation
+
+**What:** Add per-request DB re-validation to `/api/admin/*` routes. Currently, these
+routes check `session.user.isWorkspaceAdmin` from the JWT. A demoted or deleted admin
+retains access until their JWT expires. Per-request check:
+`const user = await db.user.findUnique({ where: { id }, select: { isWorkspaceAdmin: true } })`
+
+**Why:** JWT staleness is an accepted trade-off in the RBAC v1 plan, but it means a
+demoted admin has a window of continued access. The window equals the JWT expiry duration.
+
+**Pros:** Immediate effect on demotion/deletion. Closes the staleness window.
+**Cons:** One extra DB query per admin API request. Low impact at self-hosted scale.
+**Context:** Deferred from RBAC v1 as accepted trade-off. Documented in the RBAC design
+doc. Low urgency — admin routes are admin-only and self-hosted instances rarely have
+concurrent admins being demoted.
+
+**Effort:** S (human: ~2 hours / CC: ~10 min)
+**Trigger:** When a scenario requiring immediate admin demotion effect is reported.

@@ -22,7 +22,10 @@ export default async function ProjectLayout({
 
   const { projectId } = await params;
 
-  if (!(await userHasProjectAccess(session.user.id, projectId))) {
+  if (
+    !session.user.isWorkspaceAdmin &&
+    !(await userHasProjectAccess(session.user.id, projectId))
+  ) {
     notFound();
   }
 

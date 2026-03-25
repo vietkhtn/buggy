@@ -14,6 +14,7 @@ model User {
   emailVerified    DateTime?
   image            String?
   password         String?
+  isWorkspaceAdmin Boolean         @default(false)
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   accounts         Account[]
@@ -24,6 +25,16 @@ model User {
   suiteAssignments TestSuiteCase[] @relation("SuiteCaseAddedBy")
 
   @@map("users")
+}
+
+model WorkspaceSettings {
+  id                    String  @id @default(cuid())
+  enableSessionTesting  Boolean @default(false)
+  enableReleaseTracking Boolean @default(false)
+  openRegistration      Boolean @default(false)
+
+  // Single-row table — always access via upsert({ where: { id: "singleton" } })
+  @@map("workspace_settings")
 }
 
 model Account {
