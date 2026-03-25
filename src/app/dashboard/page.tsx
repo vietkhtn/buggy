@@ -20,11 +20,6 @@ export default async function ProjectsPage() {
 
   const projects = await getUserProjects(session.user.id);
 
-  // If exactly one project, redirect straight into it
-  if (projects.length === 1) {
-    redirect(`/dashboard/${projects[0].id}`);
-  }
-
   return (
     <div className="min-h-screen bg-background">
       {/* ── Top bar ── */}
