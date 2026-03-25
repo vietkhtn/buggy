@@ -13,6 +13,7 @@ const PUBLIC_PATHS = new Set(["/login", "/api/auth"]);
 const SETUP_PATHS = new Set(["/setup", "/setup/settings"]);
 const SETUP_API_PATHS = new Set(["/api/setup"]);
 const STATIC_PREFIXES = ["/_next/", "/favicon.ico", "/api/auth/"];
+const CHANGE_PASSWORD_PATH = "/change-password";
 
 function isStaticOrPublic(pathname: string): boolean {
   if (STATIC_PREFIXES.some((p) => pathname.startsWith(p))) return true;
@@ -50,12 +51,19 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
+  // JWT decode — no DB call; runs once for both admin guard + mustChangePassword gate
+  const session = await auth();
+
   // Admin guard: /admin/** requires isWorkspaceAdmin in session
   if (pathname.startsWith("/admin")) {
-    const session = await auth();
     if (!session?.user?.isWorkspaceAdmin) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
+  }
+
+  // mustChangePassword gate: redirect everywhere except /change-password itself
+  if (session?.user?.mustChangePassword && pathname !== CHANGE_PASSWORD_PATH) {
+    return NextResponse.redirect(new URL(CHANGE_PASSWORD_PATH, request.url));
   }
 
   return NextResponse.next();

@@ -17,6 +17,11 @@ export default function LoginPage() {
     const params = new URLSearchParams(window.location.search);
     return params.get("registered") === "1";
   });
+  const [showPasswordChanged] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.get("changed") === "1";
+  });
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -55,6 +60,11 @@ export default function LoginPage() {
       {showRegistrationSuccess ? (
         <p className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">
           Account created successfully. Please sign in.
+        </p>
+      ) : null}
+      {showPasswordChanged ? (
+        <p className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">
+          Password updated — please sign in.
         </p>
       ) : null}
 

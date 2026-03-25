@@ -18,6 +18,7 @@ type User = {
   name: string | null;
   email: string;
   isWorkspaceAdmin: boolean;
+  mustChangePassword: boolean;
   createdAt: Date;
   _count: { projects: number };
 };
@@ -43,6 +44,56 @@ export function AdminUsersClient({
   const [removeTarget, setRemoveTarget] = useState<User | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
+
+  // Create user dialog state
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createEmail, setCreateEmail] = useState("");
+  const [createName, setCreateName] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createdPassword, setCreatedPassword] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  function openCreateDialog() {
+    setCreateEmail("");
+    setCreateName("");
+    setCreateError(null);
+    setCreating(false);
+    setCreatedPassword(null);
+    setCopied(false);
+    setCreateOpen(true);
+  }
+
+  async function handleCreateUser(e: React.FormEvent) {
+    e.preventDefault();
+    setCreateError(null);
+    setCreating(true);
+
+    const res = await fetch("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: createEmail.trim().toLowerCase(), name: createName.trim() || undefined }),
+    });
+
+    setCreating(false);
+
+    if (!res.ok) {
+      const data = (await res.json()) as { error?: string };
+      setCreateError(data.error ?? "Failed to create user.");
+      return;
+    }
+
+    const data = (await res.json()) as { user: User; tempPassword: string };
+    setUsers((prev) => [...prev, data.user]);
+    setCreatedPassword(data.tempPassword);
+  }
+
+  async function handleCopyPassword() {
+    if (!createdPassword) return;
+    await navigator.clipboard.writeText(createdPassword);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   const adminCount = users.filter((u) => u.isWorkspaceAdmin).length;
 
@@ -97,9 +148,17 @@ export function AdminUsersClient({
   return (
     <AdminLayout activeTab="users">
       <div className="space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold">Users</h2>
-          <p className="text-sm text-muted-foreground">{users.length} workspace member{users.length !== 1 ? "s" : ""}</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">Users</h2>
+            <p className="text-sm text-muted-foreground">{users.length} workspace member{users.length !== 1 ? "s" : ""}</p>
+          </div>
+          <button
+            onClick={openCreateDialog}
+            className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+          >
+            + Create user
+          </button>
         </div>
 
         <div className="overflow-x-auto rounded-lg border border-border">
@@ -131,9 +190,16 @@ export function AdminUsersClient({
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge variant={user.isWorkspaceAdmin ? "default" : "outline"}>
-                        {user.isWorkspaceAdmin ? "Workspace Admin" : "Member"}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={user.isWorkspaceAdmin ? "default" : "outline"}>
+                          {user.isWorkspaceAdmin ? "Workspace Admin" : "Member"}
+                        </Badge>
+                        {user.mustChangePassword && (
+                          <Badge variant="outline" className="border-amber-400 text-amber-600">
+                            Pending password
+                          </Badge>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{user._count.projects}</td>
                     <td className="px-4 py-3 text-muted-foreground">
@@ -172,6 +238,92 @@ export function AdminUsersClient({
           </table>
         </div>
       </div>
+
+      {/* Create user dialog */}
+      <Dialog open={createOpen} onOpenChange={(open) => { if (!open) setCreateOpen(false); }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Create user</DialogTitle>
+            <DialogDescription>
+              A temporary password will be generated. Share it manually with the new user — they
+              will be required to change it on first sign-in.
+            </DialogDescription>
+          </DialogHeader>
+
+          {createdPassword ? (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                User <strong>{createEmail}</strong> created. Share this temporary password:
+              </p>
+              <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2 font-mono text-sm">
+                <span className="flex-1 break-all select-all">{createdPassword}</span>
+                <button
+                  onClick={handleCopyPassword}
+                  className="shrink-0 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  {copied ? "Copied!" : "Copy"}
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                This password will not be shown again after closing this dialog.
+              </p>
+              <DialogFooter>
+                <button
+                  onClick={() => setCreateOpen(false)}
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+                >
+                  Done
+                </button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              <div>
+                <label htmlFor="create-email" className="block text-sm font-medium mb-1">
+                  Email
+                </label>
+                <input
+                  id="create-email"
+                  type="email"
+                  required
+                  value={createEmail}
+                  onChange={(e) => setCreateEmail(e.target.value)}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label htmlFor="create-name" className="block text-sm font-medium mb-1">
+                  Name <span className="text-muted-foreground">(optional)</span>
+                </label>
+                <input
+                  id="create-name"
+                  type="text"
+                  value={createName}
+                  onChange={(e) => setCreateName(e.target.value)}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                />
+              </div>
+              {createError && <p className="text-sm text-destructive">{createError}</p>}
+              <DialogFooter>
+                <button
+                  type="button"
+                  onClick={() => setCreateOpen(false)}
+                  className="rounded-lg border border-border px-4 py-2 text-sm hover:bg-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
+                >
+                  {creating ? "Creating…" : "Create user"}
+                </button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Remove confirmation dialog */}
       <Dialog open={removeTarget !== null} onOpenChange={(open) => { if (!open) setRemoveTarget(null); }}>

@@ -5,6 +5,29 @@ Source plan: v1 REST API — Full CRUD Expansion (21 endpoints).
 
 ---
 
+## P2 — E2E Test: Admin Invite + Forced Password Reset Flow
+
+**What:** End-to-end test covering the full admin invite journey: admin creates a user
+account → user logs in with the temp password → middleware redirects to `/change-password`
+→ user sets a new password → signs out → re-logs in successfully with the new credentials.
+
+**Why:** Unit tests cover each route in isolation (POST /api/admin/users, PATCH
+/api/auth/change-password), but no test verifies the complete JWT-through-middleware
+integration. A shape mismatch between `auth.ts` callbacks and the middleware session
+check would pass all unit tests but fail in the browser. This flow is high-value and
+straightforward to automate.
+
+**Where to start:** Set up Playwright (`npm install -D @playwright/test`, add
+`playwright.config.ts`). Write one spec file: `e2e/admin-invite.spec.ts`. Seed DB
+with a workspace admin account, run the full flow, assert that the /dashboard is
+reachable after password reset with the new credentials.
+
+**Effort:** M (human: ~4h setup + test / CC: ~15min)
+**Depends on:** Admin invite + forced password reset feature shipped (see design doc
+`dnpi-master-design-20260325-150025.md`)
+
+---
+
 ## P2 — Webhooks
 
 **What:** Emit HTTP POST events to a caller-configured URL when key events happen

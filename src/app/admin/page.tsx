@@ -14,6 +14,7 @@ export default async function AdminPage() {
       name: true,
       email: true,
       isWorkspaceAdmin: true,
+      mustChangePassword: true,
       createdAt: true,
       _count: { select: { projects: true } },
     },

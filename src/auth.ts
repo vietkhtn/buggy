@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import Credentials from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs";
+import { verifyPassword } from "@/lib/password";
 import { db } from "@/lib/db";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
@@ -36,7 +36,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null;
         }
 
-        const isPasswordValid = await bcrypt.compare(
+        const isPasswordValid = await verifyPassword(
           credentials.password as string,
           user.password
         );
@@ -51,6 +51,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           name: user.name,
           image: user.image,
           isWorkspaceAdmin: user.isWorkspaceAdmin,
+          mustChangePassword: user.mustChangePassword,
         };
       },
     }),
@@ -60,6 +61,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (user) {
         token.id = user.id;
         token.isWorkspaceAdmin = (user as any).isWorkspaceAdmin ?? false;
+        token.mustChangePassword = (user as any).mustChangePassword ?? false;
       }
       return token;
     },
@@ -67,6 +69,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (session.user) {
         session.user.id = token.id as string;
         session.user.isWorkspaceAdmin = (token.isWorkspaceAdmin as boolean) ?? false;
+        session.user.mustChangePassword = (token.mustChangePassword as boolean) ?? false;
       }
       return session;
     },
