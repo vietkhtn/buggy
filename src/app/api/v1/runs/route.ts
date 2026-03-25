@@ -1,7 +1,7 @@
-import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { resolveApiKey } from "@/lib/api-auth";
 import { categoryForStatus } from "@/lib/failure-category";
 
 type ResultStatus = "PASSED" | "FAILED" | "SKIPPED" | "ERROR";
@@ -31,37 +31,65 @@ function mapStatus(status: "passed" | "failed" | "skipped" | "error") {
   return "ERROR" as ResultStatus;
 }
 
-async function resolveApiKey(rawKey: string) {
-  const keyPrefix = rawKey.slice(0, 8);
-  if (!keyPrefix) return null;
+function bearerToken(request: Request) {
+  const auth = request.headers.get("authorization");
+  return auth?.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+}
 
-  const candidates = await db.apiKey.findMany({
-    where: { keyPrefix },
-    include: { project: true },
+export async function GET(request: Request) {
+  const token = bearerToken(request);
+  if (!token) return NextResponse.json({ error: "Missing Bearer API key." }, { status: 401 });
+
+  const apiKey = await resolveApiKey(token);
+  if (!apiKey) return NextResponse.json({ error: "Invalid API key." }, { status: 401 });
+
+  const { searchParams } = new URL(request.url);
+  const source = searchParams.get("source") ?? undefined;
+  const status = searchParams.get("status") ?? undefined;
+  const cursor = searchParams.get("cursor") ?? undefined;
+  const rawLimit = Number(searchParams.get("limit") ?? "20");
+  const limit = Math.min(Math.max(rawLimit, 1), 100);
+
+  const runs = await db.testRun.findMany({
+    where: {
+      projectId: apiKey.projectId,
+      ...(source ? { source: source as "AUTOMATED" | "MANUAL" } : {}),
+      ...(status ? { status: status as "IN_PROGRESS" | "COMPLETED" | "ABORTED" } : {}),
+    },
+    orderBy: { startedAt: "desc" },
+    take: limit + 1,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    include: { _count: { select: { results: true } } },
   });
 
-  for (const candidate of candidates) {
-    const valid = await bcrypt.compare(rawKey, candidate.keyHash);
-    if (valid) {
-      return candidate;
-    }
-  }
+  const hasNextPage = runs.length > limit;
+  const page = hasNextPage ? runs.slice(0, limit) : runs;
+  const nextCursor = hasNextPage ? (page[page.length - 1]?.id ?? null) : null;
 
-  return null;
+  await db.apiKey.update({ where: { id: apiKey.id }, data: { lastUsedAt: new Date() } });
+
+  return NextResponse.json({
+    runs: page.map((r) => ({
+      run_id: r.id,
+      name: r.name,
+      source: r.source,
+      status: r.status,
+      result_count: r._count.results,
+      created_at: r.startedAt,
+      completed_at: r.completedAt,
+    })),
+    next_cursor: nextCursor,
+    has_next_page: hasNextPage,
+    project_id: apiKey.projectId,
+  });
 }
 
 export async function POST(request: Request) {
-  const authorization = request.headers.get("authorization");
-  const token = authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
-
-  if (!token) {
-    return NextResponse.json({ error: "Missing Bearer API key." }, { status: 401 });
-  }
+  const token = bearerToken(request);
+  if (!token) return NextResponse.json({ error: "Missing Bearer API key." }, { status: 401 });
 
   const apiKey = await resolveApiKey(token);
-  if (!apiKey) {
-    return NextResponse.json({ error: "Invalid API key." }, { status: 401 });
-  }
+  if (!apiKey) return NextResponse.json({ error: "Invalid API key." }, { status: 401 });
 
   try {
     const payload = payloadSchema.parse(await request.json());
@@ -97,24 +125,13 @@ export async function POST(request: Request) {
           }),
         },
       },
-      include: {
-        _count: {
-          select: { results: true },
-        },
-      },
+      include: { _count: { select: { results: true } } },
     });
 
-    await db.apiKey.update({
-      where: { id: apiKey.id },
-      data: { lastUsedAt: new Date() },
-    });
+    await db.apiKey.update({ where: { id: apiKey.id }, data: { lastUsedAt: new Date() } });
 
     return NextResponse.json(
-      {
-        run_id: run.id,
-        name: run.name,
-        imported_results: run._count.results,
-      },
+      { run_id: run.id, name: run.name, imported_results: run._count.results },
       { status: 201 }
     );
   } catch (error) {
@@ -124,7 +141,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-
     return NextResponse.json({ error: "Unable to ingest test run." }, { status: 500 });
   }
 }

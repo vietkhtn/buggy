@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [showRegistrationSuccess] = useState(() => {
     if (typeof window === "undefined") return false;
     const params = new URLSearchParams(window.location.search);
@@ -40,6 +41,14 @@ export default function LoginPage() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-6 py-12">
+      <div className="mb-8 flex items-center gap-2">
+        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-foreground">
+          <svg className="h-4 w-4 text-background" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <span className="text-sm font-bold tracking-tight">Buggy</span>
+      </div>
       <h1 className="text-3xl font-semibold">Welcome back</h1>
       <p className="mt-2 text-sm text-muted-foreground">Sign in to access your QA dashboard.</p>
 
@@ -72,9 +81,7 @@ export default function LoginPage() {
             <button
               type="button"
               className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
-              onClick={() =>
-                alert("Please contact your admin to reset your password.")
-              }
+              onClick={() => setShowForgotPassword(true)}
             >
               Forgot password?
             </button>
@@ -89,6 +96,11 @@ export default function LoginPage() {
           />
         </div>
 
+        {showForgotPassword && (
+          <p className="rounded-lg border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+            Contact your administrator to reset your password.
+          </p>
+        )}
         {error ? <p className="text-sm text-red-500">{error}</p> : null}
 
         <button

@@ -181,19 +181,21 @@ model TestResult {
 }
 
 model ApiKey {
-  id         String    @id @default(cuid())
+  id         String      @id @default(cuid())
   projectId  String
   userId     String
   name       String
-  keyHash    String    @unique
+  keyHash    String      @unique
   keyPrefix  String
+  scope      ApiKeyScope @default(READ_WRITE)
   lastUsedAt DateTime?
   expiresAt  DateTime?
-  createdAt  DateTime  @default(now())
-  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime    @default(now())
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([keyHash])
+  @@index([keyPrefix])
   @@map("api_keys")
 }
 
@@ -303,4 +305,9 @@ enum FailureCategory {
   NETWORK
   DATABASE
   UNKNOWN
+}
+
+enum ApiKeyScope {
+  READ_WRITE
+  READ_ONLY
 }
