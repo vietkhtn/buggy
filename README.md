@@ -23,6 +23,8 @@ Stop juggling spreadsheets and disconnected tools. Buggy brings your manual test
 - 🛠 **Project Scoping**: Multi-tenant architecture with automatic project bootstrapping for new users.
 - 🔑 **Secure API Auth**: Simple API key generation with hashed storage for programmatic access.
 - 📦 **JUnit Support**: Upload standard JUnit XML files directly to populate your dashboard.
+- 🔐 **Workspace Admin Panel**: Manage users, reset passwords, and control project membership from `/admin`.
+- 🧙 **Setup Wizard**: First-run `/setup` experience creates the initial admin account with no database access required.
 
 ---
 
@@ -46,8 +48,8 @@ This starts:
 - ⚡️ **Next.js App** on `http://localhost:3000`
 - 🔄 **Auto-migrations** for your database schema
 
-### 3. Log In
-Open `http://localhost:3000`. Use email/password to get started. Your first project will be automatically created!
+### 3. Set Up & Log In
+Open `http://localhost:3000`. On first run you will be redirected to `/setup` to create the initial admin account. After that, log in with email and password — your first project is created automatically.
 
 ---
 
@@ -95,7 +97,7 @@ curl -X POST http://localhost:3000/api/v1/runs \
 - **ORM**: [Prisma](https://www.prisma.io/)
 - **Database**: [PostgreSQL](https://www.postgresql.org/)
 - **Auth**: [NextAuth.js v5](https://authjs.dev/)
-- **Styling**: [Tailwind CSS](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/)
+- **Styling**: [Tailwind CSS v4](https://tailwindcss.com/) + [Base UI](https://base-ui.com/)
 
 ---
 
