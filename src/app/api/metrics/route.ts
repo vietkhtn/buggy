@@ -28,6 +28,7 @@ export async function GET(request: Request) {
     ? { id: requestedProjectId }
     : await ensureProjectForUser(session.user.id);
 
+  if (!project) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(await userHasProjectAccess(session.user.id, project.id))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -122,6 +123,7 @@ export async function POST(request: Request) {
       ? { id: payload.projectId }
       : await ensureProjectForUser(session.user.id);
 
+    if (!project) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (!(await userHasProjectAccess(session.user.id, project.id))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }

@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { userHasProjectAccess } from "@/lib/projects";
+import { userHasProjectAccess, userIsProjectAdmin } from "@/lib/projects";
 import { SettingsPanel } from "@/components/settings-panel";
 
 export default async function SettingsPage({
@@ -28,17 +28,32 @@ export default async function SettingsPage({
 
   if (!project) notFound();
 
-  const apiKeys = await db.apiKey.findMany({
-    where: { projectId },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      name: true,
-      keyPrefix: true,
-      createdAt: true,
-      lastUsedAt: true,
-    },
-  });
+  const [apiKeys, isAdmin] = await Promise.all([
+    db.apiKey.findMany({
+      where: { projectId },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, keyPrefix: true, createdAt: true, lastUsedAt: true },
+    }),
+    userIsProjectAdmin(session.user.id, projectId),
+  ]);
+
+  const initialMembers = isAdmin
+    ? await db.projectMember
+        .findMany({
+          where: { projectId },
+          include: { user: { select: { name: true, email: true } } },
+          orderBy: { createdAt: "asc" },
+        })
+        .then((rows) =>
+          rows.map((m) => ({
+            userId: m.userId,
+            name: m.user.name,
+            email: m.user.email,
+            role: m.role as "ADMIN" | "MEMBER" | "VIEWER",
+            createdAt: m.createdAt,
+          }))
+        )
+    : [];
 
   return (
     <main className="mx-auto w-full max-w-3xl px-6 py-8">
@@ -64,6 +79,9 @@ export default async function SettingsPage({
             lastUsedAt: Date | null;
           }>
         }
+        currentUserId={session.user.id}
+        isProjectAdmin={isAdmin}
+        initialMembers={initialMembers}
       />
     </main>
   );

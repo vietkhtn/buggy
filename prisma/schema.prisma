@@ -13,17 +13,44 @@ model User {
   email            String          @unique
   emailVerified    DateTime?
   image            String?
-  password         String?
+  password           String?
+  isWorkspaceAdmin   Boolean         @default(false)
+  mustChangePassword Boolean         @default(false)
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   accounts         Account[]
   apiKeys          ApiKey[]
+  auditLogs        AuditLog[]
   projects         ProjectMember[]
   sessions         Session[]
   testRuns         TestRun[]       @relation("CreatedBy")
   suiteAssignments TestSuiteCase[] @relation("SuiteCaseAddedBy")
 
   @@map("users")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  action    String
+  targetId  String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  actor     User     @relation(fields: [actorId], references: [id])
+
+  @@index([actorId])
+  @@index([targetId])
+  @@map("audit_logs")
+}
+
+model WorkspaceSettings {
+  id                    String  @id @default(cuid())
+  enableSessionTesting  Boolean @default(false)
+  enableReleaseTracking Boolean @default(false)
+  openRegistration      Boolean @default(false)
+
+  // Single-row table — always access via upsert({ where: { id: "singleton" } })
+  @@map("workspace_settings")
 }
 
 model Account {

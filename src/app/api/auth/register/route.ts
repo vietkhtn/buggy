@@ -1,8 +1,9 @@
-import bcrypt from "bcryptjs";
+import { hashPassword } from "@/lib/password";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { getFeatureFlags } from "@/lib/feature-flags";
 
 const registerSchema = z.object({
   email: z.string().trim().toLowerCase().email().max(255),
@@ -11,6 +12,11 @@ const registerSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const flags = await getFeatureFlags();
+  if (!flags.openRegistration) {
+    return NextResponse.json({ error: "Registration is not open." }, { status: 403 });
+  }
+
   try {
     const body = registerSchema.parse(await request.json());
     const existing = await db.user.findUnique({ where: { email: body.email } });
@@ -22,7 +28,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const passwordHash = await bcrypt.hash(body.password, 12);
+    const passwordHash = await hashPassword(body.password);
 
     const user = await db.user.create({
       data: {

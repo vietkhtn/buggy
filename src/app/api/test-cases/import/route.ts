@@ -92,7 +92,9 @@ export async function POST(request: Request) {
     ? { id: requestedProjectId }
     : await ensureProjectForUser(session.user.id);
 
-  if (!(await userHasProjectAccess(session.user.id, project.id))) {
+  if (!project) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const projectId = project.id;
+  if (!(await userHasProjectAccess(session.user.id, projectId))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -155,9 +157,9 @@ export async function POST(request: Request) {
     if (!name) return null;
     if (moduleCache.has(name)) return moduleCache.get(name)!;
     const mod = await tx.module.upsert({
-      where: { projectId_name: { projectId: project.id, name } },
+      where: { projectId_name: { projectId: projectId, name } },
       update: {},
-      create: { projectId: project.id, name },
+      create: { projectId: projectId, name },
     });
     moduleCache.set(name, mod.id);
     return mod.id;
@@ -184,11 +186,11 @@ export async function POST(request: Request) {
           .filter(Boolean);
         const jiraKey = normalizeJiraKey(row.jira ?? row.jirakey ?? row.reference);
 
-        const [displayId] = await reserveTestCaseDisplayIds(tx, project.id, 1);
+        const [displayId] = await reserveTestCaseDisplayIds(tx, projectId, 1);
 
         const tc = await tx.testCase.create({
           data: {
-            projectId: project.id,
+            projectId: projectId,
             moduleId,
             displayId,
             jiraKey,

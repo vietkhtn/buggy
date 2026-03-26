@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { Suspense } from "react";
 import { auth } from "@/auth";
 import { ensureProjectForUser, getUserProjects } from "@/lib/projects";
 import { LogoutButton } from "@/components/logout-button";
+import { DashboardNotice } from "@/components/dashboard-notice";
 
 export default async function ProjectsPage() {
   const session = await auth();
@@ -11,18 +13,18 @@ export default async function ProjectsPage() {
     redirect("/login");
   }
 
-  // Ensure the user has at least one project
-  await ensureProjectForUser(session.user.id);
+  // Ensure the user has at least one project.
+  // Returns null if the session user no longer exists in the DB (stale JWT).
+  const ensured = await ensureProjectForUser(session.user.id);
+  if (!ensured) {
+    redirect("/login");
+  }
 
   const projects = await getUserProjects(session.user.id);
 
-  // If exactly one project, redirect straight into it
-  if (projects.length === 1) {
-    redirect(`/dashboard/${projects[0].id}`);
-  }
-
   return (
     <div className="min-h-screen bg-background">
+      <Suspense><DashboardNotice /></Suspense>
       {/* ── Top bar ── */}
       <header className="border-b border-border px-6 py-4">
         <div className="mx-auto flex max-w-5xl items-center justify-between">

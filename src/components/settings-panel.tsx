@@ -15,6 +15,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { MembersTab, type MemberRow } from "@/components/members-tab";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,12 +33,25 @@ type Props = {
   projectDescription: string;
   testCasePrefix: string;
   apiKeys: ApiKeyItem[];
+  currentUserId: string;
+  isProjectAdmin: boolean;
+  initialMembers: MemberRow[];
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function SettingsPanel({ projectId, projectName, projectDescription, apiKeys, testCasePrefix }: Props) {
+export function SettingsPanel({
+  projectId,
+  projectName,
+  projectDescription,
+  apiKeys,
+  testCasePrefix,
+  currentUserId,
+  isProjectAdmin,
+  initialMembers,
+}: Props) {
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<"general" | "members">("general");
 
   const [creatingKey, setCreatingKey] = useState(false);
   const [revokingKeyId, setRevokingKeyId] = useState<string | null>(null);
@@ -225,6 +239,37 @@ export function SettingsPanel({ projectId, projectName, projectDescription, apiK
 
   return (
     <>
+      {/* Tab strip — only shown when user is a project admin */}
+      {isProjectAdmin && (
+        <div className="mb-6 flex border-b border-border">
+          {(["general", "members"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${
+                activeTab === tab
+                  ? "border-b-2 border-primary text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Members tab */}
+      {isProjectAdmin && activeTab === "members" && (
+        <MembersTab
+          projectId={projectId}
+          currentUserId={currentUserId}
+          initialMembers={initialMembers}
+        />
+      )}
+
+      {/* General tab content */}
+      {(activeTab === "general" || !isProjectAdmin) && (
+        <>
       {/* API key reveal modal */}
       <Dialog
         open={!!newApiKey}
@@ -468,6 +513,8 @@ export function SettingsPanel({ projectId, projectName, projectDescription, apiK
           </CardContent>
         </Card>
       </div>
+        </>
+      )}
     </>
   );
 }
