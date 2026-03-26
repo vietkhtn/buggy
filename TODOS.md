@@ -65,6 +65,25 @@ Alternatively, hand-write the spec post-shipping and validate it against live re
 
 ---
 
+## P3 — Rate Limit Email Lookup Endpoint
+
+**What:** Cap calls to `GET /api/projects/[projectId]/members/lookup?email=...` per
+user per minute. Any project admin can confirm whether an arbitrary email exists in the
+workspace by calling this endpoint repeatedly.
+
+**Why:** Exact email lookup reduces enumeration vs. autocomplete, but doesn't eliminate
+it. A determined caller can still enumerate the workspace user list one email at a time.
+
+**Where to start:** Apply the same rate limiting approach as `/api/admin/*` routes once
+the P3 Rate Limiting infrastructure (see below) is in place. The lookup endpoint is the
+highest-value target given it's accessible to project admins (a broader group than
+workspace admins).
+
+**Effort:** S (human: ~30 min / CC: ~5 min)
+**Depends on:** P3 Rate Limiting infrastructure shipped
+
+---
+
 ## P3 — Rate Limiting
 
 **What:** Cap requests per API key per minute (e.g. 100 req/min) using a Redis-backed

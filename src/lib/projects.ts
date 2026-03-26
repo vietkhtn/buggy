@@ -112,6 +112,14 @@ export async function createProject(
   });
 }
 
+export async function userIsProjectAdmin(userId: string, projectId: string): Promise<boolean> {
+  const member = await db.projectMember.findUnique({
+    where: { projectId_userId: { projectId, userId } },
+    select: { role: true },
+  });
+  return member?.role === "ADMIN";
+}
+
 export async function userHasProjectAccess(userId: string, projectId: string) {
   const member = await db.projectMember.findUnique({
     where: {

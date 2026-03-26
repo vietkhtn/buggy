@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -40,8 +41,16 @@ export function AdminUsersClient({
   initialUsers: User[];
   currentUserId: string;
 }) {
+  const router = useRouter();
   const [users, setUsers] = useState(initialUsers);
+
+  useEffect(() => { setUsers(initialUsers); }, [initialUsers]);
+
   const [removeTarget, setRemoveTarget] = useState<User | null>(null);
+  const [resetTarget, setResetTarget] = useState<User | null>(null);
+  const [resetPassword, setResetPassword] = useState<string | null>(null);
+  const [resetCopied, setResetCopied] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
 
@@ -145,6 +154,37 @@ export function AdminUsersClient({
     setRemoveTarget(null);
   }
 
+  async function handleResetConfirm() {
+    if (!resetTarget) return;
+    setResetting(true);
+
+    const res = await fetch(`/api/admin/users/${resetTarget.id}/reset-password`, { method: "POST" });
+
+    setResetting(false);
+
+    if (!res.ok) {
+      const data = (await res.json()) as { error?: string };
+      toast.error(data.error ?? "Failed to reset password.");
+      setResetTarget(null);
+      return;
+    }
+
+    const data = (await res.json()) as { tempPassword: string };
+    setResetPassword(data.tempPassword);
+    setResetCopied(false);
+    setUsers((prev) =>
+      prev.map((u) => (u.id === resetTarget.id ? { ...u, mustChangePassword: true } : u))
+    );
+    router.refresh();
+  }
+
+  async function handleCopyResetPassword() {
+    if (!resetPassword) return;
+    await navigator.clipboard.writeText(resetPassword);
+    setResetCopied(true);
+    setTimeout(() => setResetCopied(false), 2000);
+  }
+
   return (
     <AdminLayout activeTab="users">
       <div className="space-y-4">
@@ -207,6 +247,15 @@ export function AdminUsersClient({
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-3">
+                        {!isSelf && (
+                          <button
+                            onClick={() => { setResetTarget(user); setResetPassword(null); }}
+                            className="text-sm text-muted-foreground hover:text-foreground"
+                            aria-label={`Reset password for ${user.name ?? user.email}`}
+                          >
+                            Reset password
+                          </button>
+                        )}
                         {!isSelf && (
                           <button
                             onClick={() => handlePromote(user)}
@@ -356,6 +405,67 @@ export function AdminUsersClient({
               className="rounded-lg bg-destructive px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
             >
               {removing ? "Removing…" : "Remove"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Reset password — confirmation dialog */}
+      <Dialog open={resetTarget !== null && resetPassword === null} onOpenChange={(open) => { if (!open) setResetTarget(null); }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Reset password</DialogTitle>
+            <DialogDescription>
+              A new temporary password will be generated for{" "}
+              <strong>{resetTarget?.name ?? resetTarget?.email}</strong>. They must change it on
+              next sign-in.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              onClick={() => setResetTarget(null)}
+              className="rounded-lg border border-border px-4 py-2 text-sm hover:bg-muted"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleResetConfirm}
+              disabled={resetting}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
+            >
+              {resetting ? "Resetting…" : "Reset password"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset password — temp password reveal dialog */}
+      <Dialog open={resetPassword !== null} onOpenChange={(open) => { if (!open) { setResetPassword(null); setResetTarget(null); } }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Temporary password</DialogTitle>
+            <DialogDescription>
+              Share this password with <strong>{resetTarget?.name ?? resetTarget?.email}</strong>.
+              They will be required to change it on next sign-in.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2 font-mono text-sm">
+            <span className="flex-1 break-all select-all">{resetPassword}</span>
+            <button
+              onClick={handleCopyResetPassword}
+              className="shrink-0 text-xs text-muted-foreground hover:text-foreground"
+            >
+              {resetCopied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            This password will not be shown again after closing this dialog.
+          </p>
+          <DialogFooter>
+            <button
+              onClick={() => { setResetPassword(null); setResetTarget(null); }}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+            >
+              Done
             </button>
           </DialogFooter>
         </DialogContent>

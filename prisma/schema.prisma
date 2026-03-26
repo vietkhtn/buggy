@@ -20,12 +20,27 @@ model User {
   updatedAt        DateTime        @updatedAt
   accounts         Account[]
   apiKeys          ApiKey[]
+  auditLogs        AuditLog[]
   projects         ProjectMember[]
   sessions         Session[]
   testRuns         TestRun[]       @relation("CreatedBy")
   suiteAssignments TestSuiteCase[] @relation("SuiteCaseAddedBy")
 
   @@map("users")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  action    String
+  targetId  String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  actor     User     @relation(fields: [actorId], references: [id])
+
+  @@index([actorId])
+  @@index([targetId])
+  @@map("audit_logs")
 }
 
 model WorkspaceSettings {
