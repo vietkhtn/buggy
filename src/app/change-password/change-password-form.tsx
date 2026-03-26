@@ -48,8 +48,15 @@ export default function ChangePasswordForm({ email }: { email: string }) {
 
       // Re-authenticate with the new password so the JWT reflects
       // mustChangePassword: false, then go straight to the dashboard.
-      await signIn("credentials", { email, password, redirect: false });
-      router.push("/dashboard");
+      const result = await signIn("credentials", { email, password, redirect: false });
+      if (result?.error) {
+        setError("Password saved, but re-authentication failed. Please log in again.");
+        router.push("/login");
+        return;
+      }
+      // Hard navigation so the browser picks up the rotated session cookie
+      // before hitting middleware (router.push can race with cookie commits).
+      window.location.href = "/dashboard";
     } catch {
       setError("Network error. Please try again.");
     } finally {
