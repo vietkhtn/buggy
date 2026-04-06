@@ -1151,60 +1151,62 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
           }
         }}
       >
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[85vh] max-w-xl flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b border-border px-6 py-5">
             <DialogTitle>Manage cases</DialogTitle>
             <DialogDescription>
               Add or remove test cases in &ldquo;{manageSuiteTarget?.name}&rdquo;.
             </DialogDescription>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={saveSuiteMembership}>
-            <Input
-              type="search"
-              placeholder="Search by title or ID…"
-              value={manageCaseSearch}
-              onChange={(e) => setManageCaseSearch(e.target.value)}
-            />
-            <div className="max-h-64 overflow-auto rounded-lg border border-border">
-              <div className="space-y-0.5 p-2">
-                {filteredManageCases.map((tc) => {
-                  const selected = manageSelectedCases.includes(tc.id);
-                  return (
-                    <label
-                      key={tc.id}
-                      className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted"
-                    >
-                      <input
-                        type="checkbox"
-                        className="accent-primary"
-                        checked={selected}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setManageSelectedCases((cur) => [...cur, tc.id]);
-                          } else {
-                            setManageSelectedCases((cur) => cur.filter((id) => id !== tc.id));
-                          }
-                        }}
-                      />
-                      <div className="flex-1">
-                        <p className="truncate text-sm">{tc.title}</p>
-                        <p className="text-xs text-muted-foreground">{tc.displayId}</p>
-                      </div>
-                      <Badge variant={PRIORITY_VARIANT[tc.priority] ?? "outline"} className="text-[10px]">
-                        {tc.priority}
-                      </Badge>
-                    </label>
-                  );
-                })}
-                {filteredManageCases.length === 0 && (
-                  <p className="px-2 py-3 text-sm text-muted-foreground">No matches.</p>
-                )}
+          <form className="flex min-h-0 flex-1 flex-col" onSubmit={saveSuiteMembership}>
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              <Input
+                type="search"
+                placeholder="Search by title or ID…"
+                value={manageCaseSearch}
+                onChange={(e) => setManageCaseSearch(e.target.value)}
+              />
+              <div className="max-h-64 overflow-auto rounded-lg border border-border">
+                <div className="space-y-0.5 p-2">
+                  {filteredManageCases.map((tc) => {
+                    const selected = manageSelectedCases.includes(tc.id);
+                    return (
+                      <label
+                        key={tc.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted"
+                      >
+                        <input
+                          type="checkbox"
+                          className="accent-primary"
+                          checked={selected}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setManageSelectedCases((cur) => [...cur, tc.id]);
+                            } else {
+                              setManageSelectedCases((cur) => cur.filter((id) => id !== tc.id));
+                            }
+                          }}
+                        />
+                        <div className="flex-1">
+                          <p className="truncate text-sm">{tc.title}</p>
+                          <p className="text-xs text-muted-foreground">{tc.displayId}</p>
+                        </div>
+                        <Badge variant={PRIORITY_VARIANT[tc.priority] ?? "outline"} className="text-[10px]">
+                          {tc.priority}
+                        </Badge>
+                      </label>
+                    );
+                  })}
+                  {filteredManageCases.length === 0 && (
+                    <p className="px-2 py-3 text-sm text-muted-foreground">No matches.</p>
+                  )}
+                </div>
               </div>
+              <p className="text-xs text-muted-foreground">
+                {manageSelectedCases.length} case{manageSelectedCases.length !== 1 ? "s" : ""} selected
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {manageSelectedCases.length} case{manageSelectedCases.length !== 1 ? "s" : ""} selected
-            </p>
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="shrink-0 border-t border-border px-6 py-4 flex justify-end gap-3">
               <Button type="button" variant="outline" onClick={() => setManageSuiteTarget(null)}>
                 Cancel
               </Button>
