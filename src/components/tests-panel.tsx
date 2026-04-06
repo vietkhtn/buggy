@@ -544,7 +544,14 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
         const firstLine = text.split(/\r?\n/)[0] ?? "";
         headers = firstLine.split(",").map(h => h.replace(/^["']|["']$/g, "").trim()).filter(Boolean);
       }
-      // For xlsx: header detection is not available in-browser; user maps manually
+      if (ext === "xlsx") {
+        // Browser cannot read xlsx headers without a library — proceed to map step
+        // with empty headers so the server auto-detects columns by name.
+        setCsvHeaders([]);
+        setColumnMapping({});
+        setImportStep("map");
+        return;
+      }
 
       if (headers.length > 0) {
         setCsvHeaders(headers);
@@ -552,15 +559,15 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
         // Initial smart mapping
         const initialMapping: Record<string, string> = {};
         const targets = ["title", "description", "module", "priority", "status", "tags", "preconditions", "expectedResult", "jira"];
-        
+
         targets.forEach(t => {
-          const match = headers.find(h => 
+          const match = headers.find(h =>
             h.toLowerCase().replace(/\s+/g, "").includes(t.toLowerCase()) ||
             t.toLowerCase().includes(h.toLowerCase().replace(/\s+/g, ""))
           );
           if (match) initialMapping[t] = match;
         });
-        
+
         setColumnMapping(initialMapping);
         setImportStep("map");
       } else {
@@ -581,7 +588,9 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
       return;
     }
 
-    if (!columnMapping.title) {
+    // xlsx files skip column mapping (server auto-detects); csvHeaders is empty in that case
+    const hasMapping = csvHeaders.length > 0;
+    if (hasMapping && !columnMapping.title) {
       toast.error("You must map the 'title' column.");
       return;
     }
@@ -593,7 +602,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
       const formData = new FormData();
       formData.append("file", file);
       formData.append("projectId", projectId);
-      formData.append("mapping", JSON.stringify(columnMapping));
+      if (hasMapping) formData.append("mapping", JSON.stringify(columnMapping));
 
       const response = await fetch("/api/test-cases/import", { method: "POST", body: formData });
       const body = await response.json() as { created?: number; errors?: { row: number; error: string }[] };
@@ -981,6 +990,10 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
                 onChange={handleFileSelect}
                 className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:bg-muted file:text-foreground hover:file:bg-muted/80"
               />
+            ) : csvHeaders.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-2">
+                Column names will be read directly from the .xlsx file. Make sure your spreadsheet has a header row with names like <strong>title</strong>, description, module, priority, status, tags, preconditions, expectedResult, and jira.
+              </p>
             ) : (
               <div className="grid grid-cols-2 gap-x-6 gap-y-4 py-2">
                 {[
@@ -1151,60 +1164,62 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
           }
         }}
       >
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[85vh] max-w-xl flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b border-border px-6 py-5">
             <DialogTitle>Manage cases</DialogTitle>
             <DialogDescription>
               Add or remove test cases in &ldquo;{manageSuiteTarget?.name}&rdquo;.
             </DialogDescription>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={saveSuiteMembership}>
-            <Input
-              type="search"
-              placeholder="Search by title or ID…"
-              value={manageCaseSearch}
-              onChange={(e) => setManageCaseSearch(e.target.value)}
-            />
-            <div className="max-h-64 overflow-auto rounded-lg border border-border">
-              <div className="space-y-0.5 p-2">
-                {filteredManageCases.map((tc) => {
-                  const selected = manageSelectedCases.includes(tc.id);
-                  return (
-                    <label
-                      key={tc.id}
-                      className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted"
-                    >
-                      <input
-                        type="checkbox"
-                        className="accent-primary"
-                        checked={selected}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setManageSelectedCases((cur) => [...cur, tc.id]);
-                          } else {
-                            setManageSelectedCases((cur) => cur.filter((id) => id !== tc.id));
-                          }
-                        }}
-                      />
-                      <div className="flex-1">
-                        <p className="truncate text-sm">{tc.title}</p>
-                        <p className="text-xs text-muted-foreground">{tc.displayId}</p>
-                      </div>
-                      <Badge variant={PRIORITY_VARIANT[tc.priority] ?? "outline"} className="text-[10px]">
-                        {tc.priority}
-                      </Badge>
-                    </label>
-                  );
-                })}
-                {filteredManageCases.length === 0 && (
-                  <p className="px-2 py-3 text-sm text-muted-foreground">No matches.</p>
-                )}
+          <form className="flex min-h-0 flex-1 flex-col" onSubmit={saveSuiteMembership}>
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              <Input
+                type="search"
+                placeholder="Search by title or ID…"
+                value={manageCaseSearch}
+                onChange={(e) => setManageCaseSearch(e.target.value)}
+              />
+              <div className="max-h-64 overflow-auto rounded-lg border border-border">
+                <div className="space-y-0.5 p-2">
+                  {filteredManageCases.map((tc) => {
+                    const selected = manageSelectedCases.includes(tc.id);
+                    return (
+                      <label
+                        key={tc.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted"
+                      >
+                        <input
+                          type="checkbox"
+                          className="accent-primary"
+                          checked={selected}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setManageSelectedCases((cur) => [...cur, tc.id]);
+                            } else {
+                              setManageSelectedCases((cur) => cur.filter((id) => id !== tc.id));
+                            }
+                          }}
+                        />
+                        <div className="flex-1">
+                          <p className="truncate text-sm">{tc.title}</p>
+                          <p className="text-xs text-muted-foreground">{tc.displayId}</p>
+                        </div>
+                        <Badge variant={PRIORITY_VARIANT[tc.priority] ?? "outline"} className="text-[10px]">
+                          {tc.priority}
+                        </Badge>
+                      </label>
+                    );
+                  })}
+                  {filteredManageCases.length === 0 && (
+                    <p className="px-2 py-3 text-sm text-muted-foreground">No matches.</p>
+                  )}
+                </div>
               </div>
+              <p className="text-xs text-muted-foreground">
+                {manageSelectedCases.length} case{manageSelectedCases.length !== 1 ? "s" : ""} selected
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {manageSelectedCases.length} case{manageSelectedCases.length !== 1 ? "s" : ""} selected
-            </p>
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="shrink-0 border-t border-border px-6 py-4 flex justify-end gap-3">
               <Button type="button" variant="outline" onClick={() => setManageSuiteTarget(null)}>
                 Cancel
               </Button>
