@@ -125,6 +125,34 @@ that's the signal to prioritize this.
 
 ---
 
+## P2 — Error Handling in proxy.ts Setup Check
+
+**What:** Wrap the `db.user.count()` call in `src/proxy.ts` in a try/catch. On Prisma
+error, default `setupComplete` to `false` (treat as "setup not done") so the app
+still loads rather than crashing on every request.
+
+**Why:** If the DB is slow or unavailable at startup (cold start, connection pool
+exhaustion, or deployment race), the unhandled Prisma exception crashes the proxy
+function for every request until `setupComplete` flips to `true`. The fix is a 3-line
+try/catch that degrades gracefully instead of throwing a 500 on every request.
+
+**Where to start:** `src/proxy.ts` lines 31-34. Wrap in:
+```ts
+try {
+  const adminCount = await db.user.count({ where: { isWorkspaceAdmin: true } });
+  if (adminCount > 0) setupComplete = true;
+} catch {
+  // DB unavailable — leave setupComplete=false, retry next request
+}
+```
+Add a test case: mock `db.user.count` to throw, assert the proxy returns 200 (falls
+through to setup redirect) rather than 500.
+
+**Effort:** S (human: ~30 min / CC: ~5 min)
+**Found by:** `/plan-eng-review` during proxy.ts migration review, 2026-04-06
+
+---
+
 ## P3 — Admin API JWT Re-validation
 
 **What:** Add per-request DB re-validation to `/api/admin/*` routes. Currently, these
