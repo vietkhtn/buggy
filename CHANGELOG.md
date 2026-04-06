@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.5.1.0] - 2026-04-06
+
+### Fixed
+- `.xlsx` spreadsheet imports now work correctly by skipping browser-side header detection — the server auto-detects columns by name instead.
+- "Save changes" button is now always visible in the Manage cases dialog.
+- `middleware.ts` renamed to `proxy.ts` per Next.js 16 convention, eliminating a Next.js 16 build warning.
+- Runtime config removed from `proxy.ts` (not allowed in Next.js 16).
+
+---
+
 ## [0.5.0.0] - 2026-03-26
 
 ### Added
