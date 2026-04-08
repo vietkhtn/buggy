@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.5.2.0] - 2026-04-08
+
+### Added
+- Registration CTA on the login page is now gated behind the `openRegistration` feature flag, letting self-hosted instances disable public sign-ups.
+
+### Fixed
+- `proxy.ts` setup check is now wrapped in `try/catch` so the server starts even when the database is temporarily unavailable.
+
+---
+
 ## [0.5.1.0] - 2026-04-06
 
 ### Fixed
