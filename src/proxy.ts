@@ -27,8 +27,12 @@ export async function proxy(request: NextRequest) {
 
   // Check setup completion (set-once cache)
   if (!setupComplete) {
-    const adminCount = await db.user.count({ where: { isWorkspaceAdmin: true } });
-    if (adminCount > 0) setupComplete = true;
+    try {
+      const adminCount = await db.user.count({ where: { isWorkspaceAdmin: true } });
+      if (adminCount > 0) setupComplete = true;
+    } catch {
+      // DB unavailable — treat as not set up, allow through to /setup
+    }
   }
 
   // Setup gate: if no workspace admin exists, redirect everything to /setup
