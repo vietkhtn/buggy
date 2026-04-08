@@ -125,31 +125,11 @@ that's the signal to prioritize this.
 
 ---
 
-## P2 — Error Handling in proxy.ts Setup Check
+## ~~P2 — Error Handling in proxy.ts Setup Check~~ Fixed by /qa on master, 2026-04-08
 
-**What:** Wrap the `db.user.count()` call in `src/proxy.ts` in a try/catch. On Prisma
-error, default `setupComplete` to `false` (treat as "setup not done") so the app
-still loads rather than crashing on every request.
-
-**Why:** If the DB is slow or unavailable at startup (cold start, connection pool
-exhaustion, or deployment race), the unhandled Prisma exception crashes the proxy
-function for every request until `setupComplete` flips to `true`. The fix is a 3-line
-try/catch that degrades gracefully instead of throwing a 500 on every request.
-
-**Where to start:** `src/proxy.ts` lines 31-34. Wrap in:
-```ts
-try {
-  const adminCount = await db.user.count({ where: { isWorkspaceAdmin: true } });
-  if (adminCount > 0) setupComplete = true;
-} catch {
-  // DB unavailable — leave setupComplete=false, retry next request
-}
-```
-Add a test case: mock `db.user.count` to throw, assert the proxy returns 200 (falls
-through to setup redirect) rather than 500.
-
-**Effort:** S (human: ~30 min / CC: ~5 min)
-**Found by:** `/plan-eng-review` during proxy.ts migration review, 2026-04-06
+Fixed in commit `76c9dc4`. The `db.user.count()` call in `src/proxy.ts` is now wrapped
+in try/catch. On Prisma error, `setupComplete` stays `false` and requests redirect to
+`/setup` rather than crashing with 500.
 
 ---
 
@@ -171,3 +151,20 @@ concurrent admins being demoted.
 
 **Effort:** S (human: ~2 hours / CC: ~10 min)
 **Trigger:** When a scenario requiring immediate admin demotion effect is reported.
+
+---
+
+## P2 — Login page 500 when DB is unavailable
+
+**What:** `src/app/login/page.tsx` calls `getFeatureFlags()` which hits `db.workspaceSettings.findFirst()`.
+When the DB is unreachable, the page throws an unhandled Prisma error and returns 500.
+
+**Why:** The login page should be accessible even during brief DB outages — it's the
+primary recovery path for users. Other pages that need flags (dashboard, etc.) crashing
+is acceptable, but the login page should degrade to safe defaults.
+
+**Fix:** Wrap `getFeatureFlags()` in `src/lib/feature-flags.ts` in a try/catch and return
+default flag values on failure. Zero functional risk — defaults are all `false`.
+
+**Effort:** XS (human: ~15 min / CC: ~2 min)
+**Found by:** `/qa` on master, 2026-04-08
