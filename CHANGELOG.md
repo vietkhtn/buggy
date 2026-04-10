@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.5.2.1] - 2026-04-10
+
+### Added
+- Tag filtering for test suite search — filter test suites by tags.
+
+### Fixed
+- Test failures are now correctly categorized with the required arguments.
+
+---
+
 ## [0.5.2.0] - 2026-04-08
 
 ### Added
