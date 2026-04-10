@@ -102,6 +102,7 @@ model Project {
   updatedAt       DateTime        @updatedAt
   apiKeys         ApiKey[]
   defectReports   DefectReport[]
+  importBatches   ImportBatch[]
   modules         Module[]
   members         ProjectMember[]
   testCases       TestCase[]
@@ -141,6 +142,7 @@ model TestCase {
   id            String          @id @default(cuid())
   projectId     String
   moduleId      String?
+  importBatchId String?
   displayId     String
   jiraKey       String?         @db.VarChar(32)
   title         String          @db.VarChar(200)
@@ -152,6 +154,7 @@ model TestCase {
   tags          String[]        @default([])
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
+  importBatch   ImportBatch?    @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
   module        Module?         @relation(fields: [moduleId], references: [id])
   project       Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   results       TestResult[]
@@ -160,7 +163,21 @@ model TestCase {
   @@unique([projectId, displayId])
   @@index([projectId])
   @@index([moduleId])
+  @@index([importBatchId])
   @@map("test_cases")
+}
+
+model ImportBatch {
+  id         String     @id @default(cuid())
+  projectId  String
+  filename   String
+  importedAt DateTime   @default(now())
+  dismissed  Boolean    @default(false)
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  cases      TestCase[]
+
+  @@index([projectId])
+  @@map("import_batches")
 }
 
 model TestRun {
