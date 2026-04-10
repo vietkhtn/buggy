@@ -8,10 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [0.5.2.0] - 2026-04-08
 
 ### Added
+- Tag filtering for test suite search — filter test suites by tags.
 - Registration CTA on the login page is now gated behind the `openRegistration` feature flag, letting self-hosted instances disable public sign-ups.
 
 ### Fixed
 - `proxy.ts` setup check is now wrapped in `try/catch` so the server starts even when the database is temporarily unavailable.
+- Test failures are now correctly categorized with the required arguments.
 
 ---
 
