@@ -22,6 +22,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -336,6 +337,8 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
   const [manageSelectedCases, setManageSelectedCases] = useState<string[]>([]);
   const [manageCaseSearch, setManageCaseSearch] = useState("");
   const [updatingSuiteCases, setUpdatingSuiteCases] = useState(false);
+  const [suiteCaseTagFilter, setSuiteCaseTagFilter] = useState<string[]>([]);
+  const [manageCaseTagFilter, setManageCaseTagFilter] = useState<string[]>([]);
 
   // ─── Derived ─────────────────────────────────────────────────────────────────
 
@@ -355,21 +358,52 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
     );
   }, [testCases, runCaseSearch]);
 
+  const distinctTags = useMemo(() => {
+    const all = testCases.flatMap((tc) => tc.tags ?? []);
+    return [...new Set(all)].sort();
+  }, [testCases]);
+
   const filteredSuiteCases = useMemo(() => {
-    if (!suiteCaseSearch.trim()) return testCases;
-    const q = suiteCaseSearch.toLowerCase();
-    return testCases.filter(
-      (tc) => tc.title.toLowerCase().includes(q) || (tc.module ?? "").toLowerCase().includes(q)
-    );
-  }, [testCases, suiteCaseSearch]);
+    let result = testCases;
+    if (suiteCaseSearch.trim()) {
+      const q = suiteCaseSearch.toLowerCase();
+      result = result.filter(
+        (tc) =>
+          tc.title.toLowerCase().includes(q) ||
+          tc.displayId.toLowerCase().includes(q) ||
+          (tc.module ?? "").toLowerCase().includes(q) ||
+          (tc.jiraKey ?? "").toLowerCase().includes(q) ||
+          (tc.tags ?? []).some((t) => t.toLowerCase().includes(q))
+      );
+    }
+    if (suiteCaseTagFilter.length > 0) {
+      result = result.filter((tc) =>
+        suiteCaseTagFilter.some((tag) => (tc.tags ?? []).includes(tag))
+      );
+    }
+    return result;
+  }, [testCases, suiteCaseSearch, suiteCaseTagFilter]);
 
   const filteredManageCases = useMemo(() => {
-    if (!manageCaseSearch.trim()) return testCases;
-    const q = manageCaseSearch.toLowerCase();
-    return testCases.filter(
-      (tc) => tc.title.toLowerCase().includes(q) || tc.displayId.toLowerCase().includes(q)
-    );
-  }, [testCases, manageCaseSearch]);
+    let result = testCases;
+    if (manageCaseSearch.trim()) {
+      const q = manageCaseSearch.toLowerCase();
+      result = result.filter(
+        (tc) =>
+          tc.title.toLowerCase().includes(q) ||
+          tc.displayId.toLowerCase().includes(q) ||
+          (tc.module ?? "").toLowerCase().includes(q) ||
+          (tc.jiraKey ?? "").toLowerCase().includes(q) ||
+          (tc.tags ?? []).some((t) => t.toLowerCase().includes(q))
+      );
+    }
+    if (manageCaseTagFilter.length > 0) {
+      result = result.filter((tc) =>
+        manageCaseTagFilter.some((tag) => (tc.tags ?? []).includes(tag))
+      );
+    }
+    return result;
+  }, [testCases, manageCaseSearch, manageCaseTagFilter]);
 
   const pendingResults = useMemo(
     () => activeManualRun?.results.filter((r) => r.status === "BLOCKED") ?? [],
@@ -764,6 +798,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
       setSuites((prev) => [body.suite, ...prev]);
       setSuiteSelectedCases([]);
       setSuiteCaseSearch("");
+      setSuiteCaseTagFilter([]);
       setShowCreateSuiteDialog(false);
     } catch {
       toast.error("Network error.", { id: toastId });
@@ -1097,10 +1132,45 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
                 </div>
                 <Input
                   type="search"
-                  placeholder="Search cases…"
+                  placeholder="Search by title, ID, tag, or Jira…"
                   value={suiteCaseSearch}
                   onChange={(e) => setSuiteCaseSearch(e.target.value)}
                 />
+                {distinctTags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {distinctTags.map((tag) => {
+                      const active = suiteCaseTagFilter.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() =>
+                            setSuiteCaseTagFilter((cur) =>
+                              active ? cur.filter((t) => t !== tag) : [...cur, tag]
+                            )
+                          }
+                          className={cn(
+                            "rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
+                            active
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground hover:bg-muted/80"
+                          )}
+                        >
+                          #{tag}
+                        </button>
+                      );
+                    })}
+                    {(suiteCaseSearch || suiteCaseTagFilter.length > 0) && (
+                      <button
+                        type="button"
+                        onClick={() => { setSuiteCaseSearch(""); setSuiteCaseTagFilter([]); }}
+                        className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                      >
+                        Clear filters
+                      </button>
+                    )}
+                  </div>
+                )}
                 <div className="max-h-52 overflow-auto rounded-lg border border-border">
                   <div className="space-y-0.5 p-2">
                     {filteredSuiteCases.map((tc) => {
@@ -1161,6 +1231,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
             setManageSuiteTarget(null);
             setManageSelectedCases([]);
             setManageCaseSearch("");
+            setManageCaseTagFilter([]);
           }
         }}
       >
@@ -1173,12 +1244,70 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
           </DialogHeader>
           <form className="flex min-h-0 flex-1 flex-col" onSubmit={saveSuiteMembership}>
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-              <Input
-                type="search"
-                placeholder="Search by title or ID…"
-                value={manageCaseSearch}
-                onChange={(e) => setManageCaseSearch(e.target.value)}
-              />
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allIds = filteredManageCases.map((tc) => tc.id);
+                      const allSelected = allIds.every((id) => manageSelectedCases.includes(id));
+                      if (allSelected) {
+                        setManageSelectedCases((cur) => cur.filter((id) => !allIds.includes(id)));
+                      } else {
+                        setManageSelectedCases((cur) => [...new Set([...cur, ...allIds])]);
+                      }
+                    }}
+                    className="text-xs text-primary hover:underline underline-offset-4"
+                  >
+                    {filteredManageCases.length > 0 &&
+                    filteredManageCases.every((tc) => manageSelectedCases.includes(tc.id))
+                      ? "Deselect all"
+                      : "Select all"}
+                  </button>
+                </div>
+                <Input
+                  type="search"
+                  placeholder="Search by title, ID, tag, or Jira…"
+                  value={manageCaseSearch}
+                  onChange={(e) => setManageCaseSearch(e.target.value)}
+                />
+                {distinctTags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {distinctTags.map((tag) => {
+                      const active = manageCaseTagFilter.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() =>
+                            setManageCaseTagFilter((cur) =>
+                              active ? cur.filter((t) => t !== tag) : [...cur, tag]
+                            )
+                          }
+                          className={cn(
+                            "rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
+                            active
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground hover:bg-muted/80"
+                          )}
+                        >
+                          #{tag}
+                        </button>
+                      );
+                    })}
+                    {(manageCaseSearch || manageCaseTagFilter.length > 0) && (
+                      <button
+                        type="button"
+                        onClick={() => { setManageCaseSearch(""); setManageCaseTagFilter([]); }}
+                        className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                      >
+                        Clear filters
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
               <div className="max-h-64 overflow-auto rounded-lg border border-border">
                 <div className="space-y-0.5 p-2">
                   {filteredManageCases.map((tc) => {
