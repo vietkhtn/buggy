@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { getFeatureFlags } from "@/lib/feature-flags";
 import { Upload, CheckSquare, Activity, Key } from "lucide-react";
 
 export default async function Home() {
@@ -11,6 +12,8 @@ export default async function Home() {
   if (session?.user?.id) {
     redirect("/dashboard");
   }
+
+  const flags = await getFeatureFlags();
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -80,12 +83,14 @@ export default async function Home() {
 
           {/* CTAs */}
           <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link
-              href="/register"
-              className="inline-flex items-center justify-center rounded-lg bg-cyan-400 px-6 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
-            >
-              Create free account
-            </Link>
+            {flags.openRegistration && (
+              <Link
+                href="/register"
+                className="inline-flex items-center justify-center rounded-lg bg-cyan-400 px-6 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+              >
+                Create free account
+              </Link>
+            )}
             <a
               href="https://github.com/pdnhan/buggy"
               target="_blank"

@@ -28,7 +28,7 @@ export default async function TestsPage({
 
   if (!project) notFound();
 
-  const [testCases, activeManualRun, suites, completedRunsRaw] = await Promise.all([
+  const [testCases, activeManualRun, suites, completedRunsRaw, importBatchesRaw] = await Promise.all([
     db.testCase.findMany({
       where: { projectId },
       orderBy: { createdAt: "desc" },
@@ -45,6 +45,7 @@ export default async function TestsPage({
         expectedResult: true,
         tags: true,
         jiraKey: true,
+        importBatchId: true,
       },
     }),
     db.testRun.findFirst({
@@ -85,6 +86,11 @@ export default async function TestsPage({
       take: 20,
       include: { results: { select: { status: true } } },
     }),
+    db.importBatch.findMany({
+      where: { projectId, dismissed: false },
+      orderBy: { importedAt: "desc" },
+      include: { _count: { select: { cases: true } } },
+    }),
   ]);
 
   const mappedTestCases = (
@@ -100,6 +106,7 @@ export default async function TestsPage({
       expectedResult: string | null;
       tags: string[];
       jiraKey: string | null;
+      importBatchId: string | null;
     }>
   ).map((tc) => ({
     id: tc.id,
@@ -113,6 +120,7 @@ export default async function TestsPage({
     expectedResult: tc.expectedResult,
     tags: tc.tags,
     jiraKey: tc.jiraKey,
+    importBatchId: tc.importBatchId,
   }));
 
   const mappedRun = activeManualRun
@@ -139,6 +147,13 @@ export default async function TestsPage({
     total: run.results.length,
   }));
 
+  const importBatches = importBatchesRaw.map((b) => ({
+    id: b.id,
+    filename: b.filename,
+    importedAt: b.importedAt.toISOString(),
+    caseCount: b._count.cases,
+  }));
+
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-8">
       <TestsPanel
@@ -148,6 +163,7 @@ export default async function TestsPage({
         activeManualRun={mappedRun}
         suites={suites}
         completedRuns={completedRuns}
+        importBatches={importBatches}
       />
     </main>
   );

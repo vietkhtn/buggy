@@ -58,15 +58,22 @@ export async function POST(
   });
   const nextOrder = (maxOrder._max.order ?? -1) + 1;
 
-  await db.testSuiteCase.createMany({
-    data: testCaseIds.map((tcId, i) => ({
-      suiteId: id,
-      testCaseId: tcId,
-      order: nextOrder + i,
-      addedById: session.user.id,
-    })),
-    skipDuplicates: true,
-  });
+  await db.$transaction([
+    db.testSuiteCase.createMany({
+      data: testCaseIds.map((tcId, i) => ({
+        suiteId: id,
+        testCaseId: tcId,
+        order: nextOrder + i,
+        addedById: session.user.id,
+      })),
+      skipDuplicates: true,
+    }),
+    // Clear import badge — case is now "owned" by a suite
+    db.testCase.updateMany({
+      where: { id: { in: testCaseIds } },
+      data: { importBatchId: null },
+    }),
+  ]);
 
   const suiteWithCases = await fetchSuiteWithCases(id);
   return NextResponse.json({ success: true, suite: suiteWithCases });

@@ -3,14 +3,19 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { resolveApiKey } from "@/lib/api-auth";
 import { reserveTestCaseDisplayIds } from "@/lib/test-case-ids";
+import { autoCorrectJiraKey } from "@/lib/jira";
 
 const jiraKeySchema = z
   .string()
   .trim()
-  .min(1)
   .max(32)
-  .regex(/^[A-Z][A-Z0-9]*-[0-9]+$/, { message: "Invalid Jira issue key." })
-  .transform((v) => v.toUpperCase());
+  .optional()
+  .nullable()
+  .transform((val) => {
+    if (!val) return null;
+    const { corrected } = autoCorrectJiraKey(val);
+    return corrected;
+  });
 
 const itemSchema = z.object({
   title: z.string().trim().min(1).max(200),
@@ -21,7 +26,7 @@ const itemSchema = z.object({
   module_name: z.string().trim().min(1).max(120).optional(),
   priority: z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW"]).default("MEDIUM"),
   status: z.enum(["DRAFT", "ACTIVE", "DEPRECATED"]).default("DRAFT"),
-  jira_key: jiraKeySchema.optional().nullable(),
+  jira_key: jiraKeySchema,
 });
 
 const bulkSchema = z.object({

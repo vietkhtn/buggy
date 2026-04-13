@@ -5,6 +5,50 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.5.3.0] - 2026-04-10
+
+### Added
+- Tag filter chips on the Cases tab — filter visible test cases by one or more tags, with a clear-all button and an "Imported only" chip to surface recently imported cases.
+- Import batch banners — each import creates a dismissible amber banner listing the batch filename and case count, with actions to undo the entire import, select only the imported cases, or dismiss the badge when satisfied.
+- IMPORTED badge and amber left-border on test case table rows — newly imported cases are visually distinct until they are assigned to a suite or the batch is dismissed.
+- Tag filter chips on the Manual run tab — same tag-filter experience as the Cases tab while building a manual test run.
+- JIRA key auto-correction hint in the create/edit test case form — when a JIRA key is entered that needs normalising (e.g. `ac 3` → `AC-3`), a hint shows the corrected value in amber before saving; invalid keys are flagged in red.
+- Three-step import dialog with JIRA review step — Step 3 previews every JIRA key in the CSV, shows which will be auto-corrected and which are invalid, and requires explicit confirmation before the import proceeds.
+
+---
+
+## [0.5.2.1] - 2026-04-10
+
+### Added
+- Tag filtering for test suite search — filter test suites by tags.
+
+### Fixed
+- Test failures are now correctly categorized with the required arguments.
+
+---
+
+## [0.5.2.0] - 2026-04-08
+
+### Added
+- Tag filtering for test suite search — filter test suites by tags.
+- Registration CTA on the login page is now gated behind the `openRegistration` feature flag, letting self-hosted instances disable public sign-ups.
+
+### Fixed
+- `proxy.ts` setup check is now wrapped in `try/catch` so the server starts even when the database is temporarily unavailable.
+- Test failures are now correctly categorized with the required arguments.
+
+---
+
+## [0.5.1.0] - 2026-04-06
+
+### Fixed
+- `.xlsx` spreadsheet imports now work correctly by skipping browser-side header detection — the server auto-detects columns by name instead.
+- "Save changes" button is now always visible in the Manage cases dialog.
+- `middleware.ts` renamed to `proxy.ts` per Next.js 16 convention, eliminating a Next.js 16 build warning.
+- Runtime config removed from `proxy.ts` (not allowed in Next.js 16).
+
+---
+
 ## [0.5.0.0] - 2026-03-26
 
 ### Added

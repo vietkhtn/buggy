@@ -125,6 +125,14 @@ that's the signal to prioritize this.
 
 ---
 
+## ~~P2 — Error Handling in proxy.ts Setup Check~~ Fixed by /qa on master, 2026-04-08
+
+Fixed in commit `76c9dc4`. The `db.user.count()` call in `src/proxy.ts` is now wrapped
+in try/catch. On Prisma error, `setupComplete` stays `false` and requests redirect to
+`/setup` rather than crashing with 500.
+
+---
+
 ## P3 — Admin API JWT Re-validation
 
 **What:** Add per-request DB re-validation to `/api/admin/*` routes. Currently, these
@@ -143,3 +151,20 @@ concurrent admins being demoted.
 
 **Effort:** S (human: ~2 hours / CC: ~10 min)
 **Trigger:** When a scenario requiring immediate admin demotion effect is reported.
+
+---
+
+## P2 — Login page 500 when DB is unavailable
+
+**What:** `src/app/login/page.tsx` calls `getFeatureFlags()` which hits `db.workspaceSettings.findFirst()`.
+When the DB is unreachable, the page throws an unhandled Prisma error and returns 500.
+
+**Why:** The login page should be accessible even during brief DB outages — it's the
+primary recovery path for users. Other pages that need flags (dashboard, etc.) crashing
+is acceptable, but the login page should degrade to safe defaults.
+
+**Fix:** Wrap `getFeatureFlags()` in `src/lib/feature-flags.ts` in a try/catch and return
+default flag values on failure. Zero functional risk — defaults are all `false`.
+
+**Effort:** XS (human: ~15 min / CC: ~2 min)
+**Found by:** `/qa` on master, 2026-04-08

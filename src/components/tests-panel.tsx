@@ -22,6 +22,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,6 +38,28 @@ type TestCaseItem = {
   expectedResult?: string | null;
   tags?: string[];
   jiraKey?: string | null;
+  importBatchId?: string | null;
+};
+
+type ImportBatch = {
+  id: string;
+  filename: string;
+  importedAt: string;
+  caseCount: number;
+};
+
+type JiraRowAnalysis = {
+  rowNumber: number;
+  original: string;
+  corrected: string | null;
+  wasChanged: boolean;
+};
+
+type JiraAnalysis = {
+  needsReview: boolean;
+  rows: JiraRowAnalysis[];
+  willCorrect: number;
+  willSkip: number;
 };
 
 type ManualResult = {
@@ -90,6 +113,7 @@ type Props = {
   activeManualRun: ManualRun | null;
   suites: TestSuite[];
   completedRuns: CompletedRun[];
+  importBatches?: ImportBatch[];
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -139,6 +163,40 @@ function CaseFormFields({
 }) {
   const prefixPreview = (testCasePrefix || "TC").toUpperCase();
   const idHint = `${prefixPreview}-0001`;
+  const [jiraHint, setJiraHint] = useState<{
+    type: "corrected" | "invalid";
+    original: string;
+    corrected?: string;
+  } | null>(null);
+
+  function handleJiraBlur(e: React.FocusEvent<HTMLInputElement>) {
+    const raw = e.target.value.trim();
+    if (!raw) { setJiraHint(null); return; }
+    const upper = raw.toUpperCase();
+    if (/^[A-Z][A-Z0-9]*-[0-9]+$/.test(upper)) {
+      if (upper !== raw) {
+        setJiraHint({ type: "corrected", original: raw, corrected: upper });
+      } else {
+        setJiraHint(null);
+      }
+      return;
+    }
+    const normalised = upper.replace(/[_\s]/g, "-").replace(/[^A-Z0-9-]/g, "");
+    if (normalised.includes("-")) {
+      const match = normalised.match(/^([A-Z][A-Z0-9]*)-([0-9]+)$/);
+      if (match) {
+        setJiraHint({ type: "corrected", original: raw, corrected: `${match[1]}-${match[2]}` });
+        return;
+      }
+    } else {
+      const match = normalised.match(/^([A-Z]+)([0-9]+)$/);
+      if (match) {
+        setJiraHint({ type: "corrected", original: raw, corrected: `${match[1]}-${match[2]}` });
+        return;
+      }
+    }
+    setJiraHint({ type: "invalid", original: raw });
+  }
 
   return (
     <>
@@ -182,9 +240,25 @@ function CaseFormFields({
             type="text"
             placeholder="ABC-1234"
             defaultValue={defaults?.jiraKey ?? ""}
-            pattern="[A-Za-z][A-Za-z0-9]*-[0-9]+"
-            title="Format: PROJECT-123"
+            onBlur={handleJiraBlur}
+            onChange={() => setJiraHint(null)}
           />
+          {jiraHint?.type === "corrected" && (
+            <p className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+              <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Will be saved as <span className="font-mono font-semibold">{jiraHint.corrected}</span>
+            </p>
+          )}
+          {jiraHint?.type === "invalid" && (
+            <p className="flex items-center gap-1 text-xs text-destructive">
+              <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              Invalid format — use PROJECT-123
+            </p>
+          )}
         </div>
       </div>
 
@@ -281,7 +355,7 @@ function CaseFormFields({
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualRun, suites: initialSuites, completedRuns }: Props) {
+export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualRun, suites: initialSuites, completedRuns, importBatches: initialImportBatches = [] }: Props) {
   const router = useRouter();
 
   // ── Create dialog ────────────────────────────────────────────────────────────
@@ -302,23 +376,31 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkDeleteProgress, setBulkDeleteProgress] = useState(0);
 
   // ── Import ───────────────────────────────────────────────────────────────────
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [importStep, setImportStep] = useState<"select" | "map">("select");
+  const [importStep, setImportStep] = useState<"select" | "map" | "jira-review">("select");
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [jiraAnalysis, setJiraAnalysis] = useState<JiraAnalysis | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ── All cases search ─────────────────────────────────────────────────────────
+  // ── Import batch banners ──────────────────────────────────────────────────────
+  const [importBatches, setImportBatches] = useState<ImportBatch[]>(initialImportBatches);
+
+  // ── All cases search + filters ────────────────────────────────────────────────
   const [caseSearch, setCaseSearch] = useState("");
+  const [caseTagFilter, setCaseTagFilter] = useState<string[]>([]);
+  const [showImportedOnly, setShowImportedOnly] = useState(false);
 
   // ── Manual run ───────────────────────────────────────────────────────────────
   const [selectedCases, setSelectedCases] = useState<string[]>([]);
   const [selectedSuiteId, setSelectedSuiteId] = useState<string | null>(null);
   const [runCaseSearch, setRunCaseSearch] = useState("");
+  const [runCaseTagFilter, setRunCaseTagFilter] = useState<string[]>([]);
   const [runName, setRunName] = useState(`Manual Run ${new Date().toLocaleDateString()}`);
   const [creatingRun, setCreatingRun] = useState(false);
   const [completingRun, setCompletingRun] = useState(false);
@@ -336,40 +418,102 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
   const [manageSelectedCases, setManageSelectedCases] = useState<string[]>([]);
   const [manageCaseSearch, setManageCaseSearch] = useState("");
   const [updatingSuiteCases, setUpdatingSuiteCases] = useState(false);
+  const [suiteCaseTagFilter, setSuiteCaseTagFilter] = useState<string[]>([]);
+  const [manageCaseTagFilter, setManageCaseTagFilter] = useState<string[]>([]);
 
   // ─── Derived ─────────────────────────────────────────────────────────────────
 
   const filteredCases = useMemo(() => {
-    if (!caseSearch.trim()) return testCases;
-    const q = caseSearch.toLowerCase();
-    return testCases.filter(
-      (tc) => tc.title.toLowerCase().includes(q) || (tc.module ?? "").toLowerCase().includes(q)
-    );
-  }, [testCases, caseSearch]);
+    let result = testCases;
+    if (showImportedOnly) {
+      result = result.filter((tc) => tc.importBatchId != null);
+    }
+    if (caseSearch.trim()) {
+      const q = caseSearch.toLowerCase();
+      result = result.filter(
+        (tc) =>
+          tc.title.toLowerCase().includes(q) ||
+          tc.displayId.toLowerCase().includes(q) ||
+          (tc.module ?? "").toLowerCase().includes(q) ||
+          (tc.jiraKey ?? "").toLowerCase().includes(q) ||
+          (tc.tags ?? []).some((t) => t.toLowerCase().includes(q))
+      );
+    }
+    if (caseTagFilter.length > 0) {
+      result = result.filter((tc) =>
+        caseTagFilter.some((tag) => (tc.tags ?? []).includes(tag))
+      );
+    }
+    return result;
+  }, [testCases, caseSearch, caseTagFilter, showImportedOnly]);
 
   const filteredRunCases = useMemo(() => {
-    if (!runCaseSearch.trim()) return testCases;
-    const q = runCaseSearch.toLowerCase();
-    return testCases.filter(
-      (tc) => tc.title.toLowerCase().includes(q) || (tc.module ?? "").toLowerCase().includes(q)
-    );
-  }, [testCases, runCaseSearch]);
+    let result = testCases;
+    if (runCaseSearch.trim()) {
+      const q = runCaseSearch.toLowerCase();
+      result = result.filter(
+        (tc) =>
+          tc.title.toLowerCase().includes(q) ||
+          tc.displayId.toLowerCase().includes(q) ||
+          (tc.module ?? "").toLowerCase().includes(q) ||
+          (tc.jiraKey ?? "").toLowerCase().includes(q) ||
+          (tc.tags ?? []).some((t) => t.toLowerCase().includes(q))
+      );
+    }
+    if (runCaseTagFilter.length > 0) {
+      result = result.filter((tc) =>
+        runCaseTagFilter.some((tag) => (tc.tags ?? []).includes(tag))
+      );
+    }
+    return result;
+  }, [testCases, runCaseSearch, runCaseTagFilter]);
+
+  const distinctTags = useMemo(() => {
+    const all = testCases.flatMap((tc) => tc.tags ?? []);
+    return [...new Set(all)].sort();
+  }, [testCases]);
 
   const filteredSuiteCases = useMemo(() => {
-    if (!suiteCaseSearch.trim()) return testCases;
-    const q = suiteCaseSearch.toLowerCase();
-    return testCases.filter(
-      (tc) => tc.title.toLowerCase().includes(q) || (tc.module ?? "").toLowerCase().includes(q)
-    );
-  }, [testCases, suiteCaseSearch]);
+    let result = testCases;
+    if (suiteCaseSearch.trim()) {
+      const q = suiteCaseSearch.toLowerCase();
+      result = result.filter(
+        (tc) =>
+          tc.title.toLowerCase().includes(q) ||
+          tc.displayId.toLowerCase().includes(q) ||
+          (tc.module ?? "").toLowerCase().includes(q) ||
+          (tc.jiraKey ?? "").toLowerCase().includes(q) ||
+          (tc.tags ?? []).some((t) => t.toLowerCase().includes(q))
+      );
+    }
+    if (suiteCaseTagFilter.length > 0) {
+      result = result.filter((tc) =>
+        suiteCaseTagFilter.some((tag) => (tc.tags ?? []).includes(tag))
+      );
+    }
+    return result;
+  }, [testCases, suiteCaseSearch, suiteCaseTagFilter]);
 
   const filteredManageCases = useMemo(() => {
-    if (!manageCaseSearch.trim()) return testCases;
-    const q = manageCaseSearch.toLowerCase();
-    return testCases.filter(
-      (tc) => tc.title.toLowerCase().includes(q) || tc.displayId.toLowerCase().includes(q)
-    );
-  }, [testCases, manageCaseSearch]);
+    let result = testCases;
+    if (manageCaseSearch.trim()) {
+      const q = manageCaseSearch.toLowerCase();
+      result = result.filter(
+        (tc) =>
+          tc.title.toLowerCase().includes(q) ||
+          tc.displayId.toLowerCase().includes(q) ||
+          (tc.module ?? "").toLowerCase().includes(q) ||
+          (tc.jiraKey ?? "").toLowerCase().includes(q) ||
+          (tc.tags ?? []).some((t) => t.toLowerCase().includes(q))
+      );
+    }
+    if (manageCaseTagFilter.length > 0) {
+      result = result.filter((tc) =>
+        manageCaseTagFilter.some((tag) => (tc.tags ?? []).includes(tag))
+      );
+    }
+    return result;
+  }, [testCases, manageCaseSearch, manageCaseTagFilter]);
 
   const pendingResults = useMemo(
     () => activeManualRun?.results.filter((r) => r.status === "BLOCKED") ?? [],
@@ -502,17 +646,20 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
 
   async function confirmBulkDelete() {
     setBulkDeleting(true);
+    setBulkDeleteProgress(0);
     const ids = Array.from(selectedIds);
     let failed = 0;
-    for (const id of ids) {
+    for (let i = 0; i < ids.length; i++) {
       try {
-        const res = await fetch(`/api/test-cases/${id}`, { method: "DELETE" });
+        const res = await fetch(`/api/test-cases/${ids[i]}`, { method: "DELETE" });
         if (!res.ok) failed++;
       } catch {
         failed++;
       }
+      setBulkDeleteProgress(i + 1);
     }
     setBulkDeleting(false);
+    setBulkDeleteProgress(0);
     setShowBulkDeleteDialog(false);
     setSelectedIds(new Set());
     if (failed > 0) {
@@ -521,6 +668,46 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
       toast.success(`${ids.length} test case${ids.length !== 1 ? "s" : ""} deleted.`);
     }
     router.refresh();
+  }
+
+  // ─── Import batch actions ────────────────────────────────────────────────────
+
+  async function dismissBatch(batchId: string) {
+    try {
+      await fetch(`/api/import-batches/${batchId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dismissed: true }),
+      });
+      setImportBatches((prev) => prev.filter((b) => b.id !== batchId));
+    } catch {
+      toast.error("Unable to dismiss banner.");
+    }
+  }
+
+  async function undoBatch(batchId: string) {
+    const toastId = toast.loading("Undoing import…");
+    try {
+      const res = await fetch(`/api/import-batches/${batchId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(body.error ?? "Unable to undo import.", { id: toastId });
+        return;
+      }
+      const { deleted } = (await res.json()) as { deleted: number };
+      toast.success(`Removed ${deleted} imported test case${deleted !== 1 ? "s" : ""}.`, { id: toastId });
+      setImportBatches((prev) => prev.filter((b) => b.id !== batchId));
+      router.refresh();
+    } catch {
+      toast.error("Network error.", { id: toastId });
+    }
+  }
+
+  function selectBatchCases(batchId: string) {
+    const batchCaseIds = new Set(
+      testCases.filter((tc) => tc.importBatchId === batchId).map((tc) => tc.id)
+    );
+    setSelectedIds(batchCaseIds);
   }
 
   // ─── Import ──────────────────────────────────────────────────────────────────
@@ -544,7 +731,14 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
         const firstLine = text.split(/\r?\n/)[0] ?? "";
         headers = firstLine.split(",").map(h => h.replace(/^["']|["']$/g, "").trim()).filter(Boolean);
       }
-      // For xlsx: header detection is not available in-browser; user maps manually
+      if (ext === "xlsx") {
+        // Browser cannot read xlsx headers without a library — proceed to map step
+        // with empty headers so the server auto-detects columns by name.
+        setCsvHeaders([]);
+        setColumnMapping({});
+        setImportStep("map");
+        return;
+      }
 
       if (headers.length > 0) {
         setCsvHeaders(headers);
@@ -552,15 +746,15 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
         // Initial smart mapping
         const initialMapping: Record<string, string> = {};
         const targets = ["title", "description", "module", "priority", "status", "tags", "preconditions", "expectedResult", "jira"];
-        
+
         targets.forEach(t => {
-          const match = headers.find(h => 
+          const match = headers.find(h =>
             h.toLowerCase().replace(/\s+/g, "").includes(t.toLowerCase()) ||
             t.toLowerCase().includes(h.toLowerCase().replace(/\s+/g, ""))
           );
           if (match) initialMapping[t] = match;
         });
-        
+
         setColumnMapping(initialMapping);
         setImportStep("map");
       } else {
@@ -581,11 +775,42 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
       return;
     }
 
-    if (!columnMapping.title) {
+    // xlsx files skip column mapping (server auto-detects); csvHeaders is empty in that case
+    const hasMapping = csvHeaders.length > 0;
+    if (hasMapping && !columnMapping.title) {
       toast.error("You must map the 'title' column.");
       return;
     }
 
+    // ── Step 2 → 3: run JIRA preview if jira column is mapped ──
+    if (importStep === "map" && columnMapping.jira) {
+      setImporting(true);
+      try {
+        const previewData = new FormData();
+        previewData.append("file", file);
+        previewData.append("projectId", projectId);
+        if (hasMapping) previewData.append("mapping", JSON.stringify(columnMapping));
+
+        const previewRes = await fetch("/api/test-cases/import/preview", { method: "POST", body: previewData });
+        if (previewRes.ok) {
+          const previewBody = await previewRes.json() as { jiraAnalysis: JiraAnalysis };
+          if (previewBody.jiraAnalysis.needsReview) {
+            setJiraAnalysis(previewBody.jiraAnalysis);
+            setImportStep("jira-review");
+            setImporting(false);
+            return;
+          }
+        }
+      } catch {
+        // preview failed — proceed directly to import without the review step
+      }
+      setImporting(false);
+    }
+
+    await doImport(file, hasMapping);
+  }
+
+  async function doImport(file: File, hasMapping: boolean) {
     setImporting(true);
     const toastId = toast.loading("Importing…");
 
@@ -593,10 +818,10 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
       const formData = new FormData();
       formData.append("file", file);
       formData.append("projectId", projectId);
-      formData.append("mapping", JSON.stringify(columnMapping));
+      if (hasMapping) formData.append("mapping", JSON.stringify(columnMapping));
 
       const response = await fetch("/api/test-cases/import", { method: "POST", body: formData });
-      const body = await response.json() as { created?: number; errors?: { row: number; error: string }[] };
+      const body = await response.json() as { created?: number; errors?: { row: number; error: string }[]; batchId?: string; filename?: string };
 
       if (!response.ok) {
         toast.error((body as { error?: string }).error ?? "Import failed.", { id: toastId });
@@ -608,11 +833,21 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
         `Imported ${body.created} test case${body.created !== 1 ? "s" : ""}${errCount ? ` (${errCount} rows skipped)` : ""}.`,
         { id: toastId }
       );
+
+      // Add the new batch to the banners immediately
+      if (body.batchId && body.filename && (body.created ?? 0) > 0) {
+        setImportBatches((prev) => [
+          { id: body.batchId!, filename: body.filename!, importedAt: new Date().toISOString(), caseCount: body.created! },
+          ...prev,
+        ]);
+      }
+
       setShowImportDialog(false);
       setImportStep("select");
       setCsvHeaders([]);
       setColumnMapping({});
       setSelectedFile(null);
+      setJiraAnalysis(null);
       router.refresh();
     } catch {
       toast.error("Network error during import.", { id: toastId });
@@ -755,6 +990,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
       setSuites((prev) => [body.suite, ...prev]);
       setSuiteSelectedCases([]);
       setSuiteCaseSearch("");
+      setSuiteCaseTagFilter([]);
       setShowCreateSuiteDialog(false);
     } catch {
       toast.error("Network error.", { id: toastId });
@@ -859,22 +1095,24 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
           }
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[min(90dvh,48rem)] max-w-2xl flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b border-border px-4 pt-4 pb-4">
             <DialogTitle>New test case</DialogTitle>
             <DialogDescription>Add a new test case to this project.</DialogDescription>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={createTestCase}>
-            <CaseFormFields
-              showAdvanced={createShowAdvanced}
-              setShowAdvanced={setCreateShowAdvanced}
-              testCasePrefix={testCasePrefix}
-            />
-            <div className="flex justify-end gap-3 pt-2">
+          <form className="flex min-h-0 flex-1 flex-col" onSubmit={createTestCase}>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+              <CaseFormFields
+                showAdvanced={createShowAdvanced}
+                setShowAdvanced={setCreateShowAdvanced}
+                testCasePrefix={testCasePrefix}
+              />
+            </div>
+            <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-border px-4 pt-3 pb-4 sm:flex-row sm:justify-end">
               <Button type="button" variant="outline" onClick={() => setShowCreateDialog(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={creatingCase}>
+              <Button type="submit" disabled={creatingCase} className="w-full sm:w-auto">
                 {creatingCase ? "Saving…" : "Create test case"}
               </Button>
             </div>
@@ -884,24 +1122,26 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
 
       {/* ── Edit test case dialog ── */}
       <Dialog open={!!editTarget} onOpenChange={(open) => { if (!open) setEditTarget(null); }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[min(90dvh,48rem)] max-w-2xl flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b border-border px-4 pt-4 pb-4">
             <DialogTitle>Edit test case</DialogTitle>
             <DialogDescription>Update the test case details.</DialogDescription>
           </DialogHeader>
-          <form key={editTarget?.id} className="space-y-4" onSubmit={saveEdit}>
-            <CaseFormFields
-              showAdvanced={editShowAdvanced}
-              setShowAdvanced={setEditShowAdvanced}
-              defaults={editTarget ?? undefined}
-              testCasePrefix={testCasePrefix}
-              readOnlyDisplayId={editTarget?.displayId}
-            />
-            <div className="flex justify-end gap-3 pt-2">
+          <form key={editTarget?.id} className="flex min-h-0 flex-1 flex-col" onSubmit={saveEdit}>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+              <CaseFormFields
+                showAdvanced={editShowAdvanced}
+                setShowAdvanced={setEditShowAdvanced}
+                defaults={editTarget ?? undefined}
+                testCasePrefix={testCasePrefix}
+                readOnlyDisplayId={editTarget?.displayId}
+              />
+            </div>
+            <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-border px-4 pt-3 pb-4 sm:flex-row sm:justify-end">
               <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={savingEdit}>
+              <Button type="submit" disabled={savingEdit} className="w-full sm:w-auto">
                 {savingEdit ? "Saving…" : "Save changes"}
               </Button>
             </div>
@@ -911,18 +1151,18 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
 
       {/* ── Delete confirm dialog ── */}
       <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-[min(95vw,28rem)]">
           <DialogHeader>
             <DialogTitle>Delete test case?</DialogTitle>
             <DialogDescription>
               &ldquo;{deleteTarget?.title}&rdquo; will be permanently deleted. Historical run data remains untouched.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)}>
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setDeleteTarget(null)}>
               Cancel
             </Button>
-            <Button variant="destructive" disabled={deletingCase} onClick={confirmDelete}>
+            <Button variant="destructive" className="w-full sm:w-auto" disabled={deletingCase} onClick={confirmDelete}>
               {deletingCase ? "Deleting…" : "Delete"}
             </Button>
           </div>
@@ -930,20 +1170,28 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
       </Dialog>
 
       {/* ── Bulk delete confirm dialog ── */}
-      <Dialog open={showBulkDeleteDialog} onOpenChange={(open) => { if (!open) setShowBulkDeleteDialog(false); }}>
-        <DialogContent className="max-w-sm">
+      <Dialog open={showBulkDeleteDialog} onOpenChange={(open) => { if (!open && !bulkDeleting) setShowBulkDeleteDialog(false); }}>
+        <DialogContent className="max-w-[min(95vw,28rem)]">
           <DialogHeader>
             <DialogTitle>Delete {selectedIds.size} test case{selectedIds.size !== 1 ? "s" : ""}?</DialogTitle>
             <DialogDescription>
               This will permanently delete {selectedIds.size} test case{selectedIds.size !== 1 ? "s" : ""}. Historical run data remains untouched.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="outline" onClick={() => setShowBulkDeleteDialog(false)}>
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" className="w-full sm:w-auto" disabled={bulkDeleting} onClick={() => setShowBulkDeleteDialog(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" disabled={bulkDeleting} onClick={confirmBulkDelete}>
-              {bulkDeleting ? "Deleting…" : `Delete ${selectedIds.size}`}
+            <Button variant="destructive" className="w-full sm:w-auto" disabled={bulkDeleting} onClick={confirmBulkDelete}>
+              {bulkDeleting ? (
+                <span className="flex items-center gap-2">
+                  <svg className="animate-spin size-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Deleting {bulkDeleteProgress} of {selectedIds.size}…
+                </span>
+              ) : `Delete ${selectedIds.size}`}
             </Button>
           </div>
         </DialogContent>
@@ -957,81 +1205,151 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
           setCsvHeaders([]);
           setColumnMapping({});
           setSelectedFile(null);
+          setJiraAnalysis(null);
           if (fileInputRef.current) {
             fileInputRef.current.value = "";
           }
         }
       }}>
-        <DialogContent className={importStep === "map" ? "max-w-2xl" : "max-w-lg"}>
-          <DialogHeader>
+        <DialogContent className={`flex max-h-[min(90dvh,48rem)] flex-col gap-0 overflow-hidden p-0 ${importStep === "map" ? "max-w-2xl" : importStep === "jira-review" ? "max-w-xl" : "max-w-lg"}`}>
+          <DialogHeader className="shrink-0 border-b border-border px-4 pt-4 pb-4">
             <DialogTitle>Import test cases</DialogTitle>
             <DialogDescription>
-              {importStep === "select" 
+              {importStep === "select"
                 ? "Upload an Excel (.xlsx) or CSV file. You will be able to map columns in the next step."
+                : importStep === "jira-review"
+                ? "Step 3 of 3 — Review JIRA key corrections before importing."
                 : "Map your file columns to the internal test case fields."}
             </DialogDescription>
           </DialogHeader>
-          
-          <form className="space-y-4" onSubmit={handleImport}>
-            {importStep === "select" ? (
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.csv"
-                onChange={handleFileSelect}
-                className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:bg-muted file:text-foreground hover:file:bg-muted/80"
-              />
-            ) : (
-              <div className="grid grid-cols-2 gap-x-6 gap-y-4 py-2">
-                {[
-                  { id: "title", label: "Title *", required: true },
-                  { id: "description", label: "Test Steps" },
-                  { id: "module", label: "Module" },
-                  { id: "priority", label: "Priority" },
-                  { id: "status", label: "Status" },
-                  { id: "tags", label: "Tags" },
-                  { id: "preconditions", label: "Preconditions" },
-                  { id: "expectedResult", label: "Expected Result" },
-                  { id: "jira", label: "Jira Reference" },
-                ].map((field) => (
-                  <div key={field.id} className="space-y-1.5">
-                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      {field.label}
-                    </Label>
-                    <Select
-                      value={columnMapping[field.id] || "none"}
-                      onValueChange={(val) => setColumnMapping(prev => ({ 
-                        ...prev, 
-                        [field.id]: val === "none" ? "" : val 
-                      }) as Record<string, string>)}
-                    >
-                      <SelectTrigger className="h-9">
-                        <SelectValue placeholder="Select column..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">-- Skip --</SelectItem>
-                        {csvHeaders.map(h => (
-                          <SelectItem key={h} value={h}>{h}</SelectItem>
+
+          <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleImport}>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              {importStep === "select" ? (
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.csv"
+                  onChange={handleFileSelect}
+                  className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:bg-muted file:text-foreground hover:file:bg-muted/80"
+                />
+              ) : importStep === "jira-review" && jiraAnalysis ? (
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    We can automatically fix some JIRA keys to match the required format (e.g. AC-03).
+                  </p>
+                  <div className="rounded-lg border border-border">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/60">
+                        <tr className="border-b border-border">
+                          <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Row</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Original</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Corrected to</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {jiraAnalysis.rows.map((row) => (
+                          <tr key={row.rowNumber}>
+                            <td className="px-3 py-2 tabular-nums text-muted-foreground">{row.rowNumber}</td>
+                            <td className="px-3 py-2 font-mono">{row.original}</td>
+                            <td className="px-3 py-2">
+                              {row.corrected !== null ? (
+                                <span className="flex items-center gap-1.5 text-foreground">
+                                  <span className="font-mono">{row.corrected}</span>
+                                  <svg className="h-3.5 w-3.5 text-[var(--success)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground/50">(will be skipped)</span>
+                              )}
+                            </td>
+                          </tr>
                         ))}
-                      </SelectContent>
-                    </Select>
+                      </tbody>
+                    </table>
                   </div>
-                ))}
-              </div>
-            )}
-            
-            <div className="flex justify-end gap-3 pt-2">
-              <Button type="button" variant="outline" onClick={() => setShowImportDialog(false)}>
+                  <p className="text-xs text-muted-foreground">
+                    {jiraAnalysis.willCorrect > 0 && `${jiraAnalysis.willCorrect} will be corrected`}
+                    {jiraAnalysis.willCorrect > 0 && jiraAnalysis.willSkip > 0 && " · "}
+                    {jiraAnalysis.willSkip > 0 && `${jiraAnalysis.willSkip} will be skipped`}
+                  </p>
+                </div>
+              ) : csvHeaders.length === 0 ? (
+                <p className="py-2 text-sm text-muted-foreground">
+                  Column names will be read directly from the .xlsx file. Make sure your spreadsheet has a header row with names like <strong>title</strong>, description, module, priority, status, tags, preconditions, expectedResult, and jira.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 gap-x-6 gap-y-4 py-2 sm:grid-cols-2">
+                  {[
+                    { id: "title", label: "Title *", required: true },
+                    { id: "description", label: "Test Steps" },
+                    { id: "module", label: "Module" },
+                    { id: "priority", label: "Priority" },
+                    { id: "status", label: "Status" },
+                    { id: "tags", label: "Tags" },
+                    { id: "preconditions", label: "Preconditions" },
+                    { id: "expectedResult", label: "Expected Result" },
+                    { id: "jira", label: "Jira Reference" },
+                  ].map((field) => (
+                    <div key={field.id} className="space-y-1.5">
+                      <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        {field.label}
+                      </Label>
+                      <Select
+                        value={columnMapping[field.id] || "none"}
+                        onValueChange={(val) => setColumnMapping(prev => ({
+                          ...prev,
+                          [field.id]: val === "none" ? "" : val
+                        }) as Record<string, string>)}
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="Select column..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">-- Skip --</SelectItem>
+                          {csvHeaders.map(h => (
+                            <SelectItem key={h} value={h}>{h}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-border px-4 pt-3 pb-4 sm:flex-row sm:justify-end">
+              <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setShowImportDialog(false)}>
                 Cancel
               </Button>
               {importStep === "map" && (
-                <Button type="button" variant="ghost" onClick={() => setImportStep("select")}>
+                <Button type="button" variant="ghost" className="w-full sm:w-auto" onClick={() => setImportStep("select")}>
                   Back
                 </Button>
               )}
-              <Button type="submit" disabled={importing || (importStep === "select" && !selectedFile)}>
-                {importing ? "Importing…" : importStep === "select" ? "Next" : "Import"}
-              </Button>
+              {importStep === "jira-review" && (
+                <Button type="button" variant="ghost" className="w-full sm:w-auto" onClick={() => setImportStep("map")}>
+                  Back to mapping
+                </Button>
+              )}
+              {importStep === "jira-review" ? (
+                <Button
+                  type="button"
+                  className="w-full sm:w-auto"
+                  disabled={importing}
+                  onClick={() => {
+                    const file = selectedFile ?? fileInputRef.current?.files?.[0] ?? null;
+                    if (file) doImport(file, csvHeaders.length > 0);
+                  }}
+                >
+                  {importing ? "Importing…" : "Apply corrections & import"}
+                </Button>
+              ) : (
+                <Button type="submit" className="w-full sm:w-auto" disabled={importing || (importStep === "select" && !selectedFile)}>
+                  {importing ? "Importing…" : importStep === "select" ? "Next" : "Next"}
+                </Button>
+              )}
             </div>
           </form>
         </DialogContent>
@@ -1051,7 +1369,7 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
             <DialogDescription>Group test cases into a named suite.</DialogDescription>
           </DialogHeader>
           <form className="flex min-h-0 flex-1 flex-col" onSubmit={createSuite}>
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+            <div className="min-h-0 flex-1 overflow-y-auto space-y-5 px-6 py-5">
               <div className="space-y-1.5">
                 <Label htmlFor="suite-name">Suite name *</Label>
                 <Input id="suite-name" name="name" required placeholder="e.g. Smoke Tests" />
@@ -1084,11 +1402,46 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
                 </div>
                 <Input
                   type="search"
-                  placeholder="Search cases…"
+                  placeholder="Search by title, ID, tag, or Jira…"
                   value={suiteCaseSearch}
                   onChange={(e) => setSuiteCaseSearch(e.target.value)}
                 />
-                <div className="max-h-52 overflow-auto rounded-lg border border-border">
+                {distinctTags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {distinctTags.map((tag) => {
+                      const active = suiteCaseTagFilter.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() =>
+                            setSuiteCaseTagFilter((cur) =>
+                              active ? cur.filter((t) => t !== tag) : [...cur, tag]
+                            )
+                          }
+                          className={cn(
+                            "rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
+                            active
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground hover:bg-muted/80"
+                          )}
+                        >
+                          #{tag}
+                        </button>
+                      );
+                    })}
+                    {(suiteCaseSearch || suiteCaseTagFilter.length > 0) && (
+                      <button
+                        type="button"
+                        onClick={() => { setSuiteCaseSearch(""); setSuiteCaseTagFilter([]); }}
+                        className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                      >
+                        Clear filters
+                      </button>
+                    )}
+                  </div>
+                )}
+                <div className="rounded-lg border border-border">
                   <div className="space-y-0.5 p-2">
                     {filteredSuiteCases.map((tc) => {
                       const selected = suiteSelectedCases.includes(tc.id);
@@ -1128,11 +1481,11 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
                 </p>
               </div>
             </div>
-            <div className="shrink-0 border-t border-border px-6 py-4 flex justify-end gap-3">
-              <Button type="button" variant="outline" onClick={() => setShowCreateSuiteDialog(false)}>
+            <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-border px-6 py-4 sm:flex-row sm:justify-end">
+              <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setShowCreateSuiteDialog(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={creatingSuite}>
+              <Button type="submit" className="w-full sm:w-auto" disabled={creatingSuite}>
                 {creatingSuite ? "Creating…" : "Create suite"}
               </Button>
             </div>
@@ -1148,67 +1501,128 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
             setManageSuiteTarget(null);
             setManageSelectedCases([]);
             setManageCaseSearch("");
+            setManageCaseTagFilter([]);
           }
         }}
       >
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[85vh] max-w-xl flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b border-border px-6 py-5">
             <DialogTitle>Manage cases</DialogTitle>
             <DialogDescription>
               Add or remove test cases in &ldquo;{manageSuiteTarget?.name}&rdquo;.
             </DialogDescription>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={saveSuiteMembership}>
-            <Input
-              type="search"
-              placeholder="Search by title or ID…"
-              value={manageCaseSearch}
-              onChange={(e) => setManageCaseSearch(e.target.value)}
-            />
-            <div className="max-h-64 overflow-auto rounded-lg border border-border">
-              <div className="space-y-0.5 p-2">
-                {filteredManageCases.map((tc) => {
-                  const selected = manageSelectedCases.includes(tc.id);
-                  return (
-                    <label
-                      key={tc.id}
-                      className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted"
-                    >
-                      <input
-                        type="checkbox"
-                        className="accent-primary"
-                        checked={selected}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setManageSelectedCases((cur) => [...cur, tc.id]);
-                          } else {
-                            setManageSelectedCases((cur) => cur.filter((id) => id !== tc.id));
+          <form className="flex min-h-0 flex-1 flex-col" onSubmit={saveSuiteMembership}>
+            <div className="min-h-0 flex-1 overflow-y-auto space-y-4 px-6 py-5">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allIds = filteredManageCases.map((tc) => tc.id);
+                      const allSelected = allIds.every((id) => manageSelectedCases.includes(id));
+                      if (allSelected) {
+                        setManageSelectedCases((cur) => cur.filter((id) => !allIds.includes(id)));
+                      } else {
+                        setManageSelectedCases((cur) => [...new Set([...cur, ...allIds])]);
+                      }
+                    }}
+                    className="text-xs text-primary hover:underline underline-offset-4"
+                  >
+                    {filteredManageCases.length > 0 &&
+                    filteredManageCases.every((tc) => manageSelectedCases.includes(tc.id))
+                      ? "Deselect all"
+                      : "Select all"}
+                  </button>
+                </div>
+                <Input
+                  type="search"
+                  placeholder="Search by title, ID, tag, or Jira…"
+                  value={manageCaseSearch}
+                  onChange={(e) => setManageCaseSearch(e.target.value)}
+                />
+                {distinctTags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {distinctTags.map((tag) => {
+                      const active = manageCaseTagFilter.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() =>
+                            setManageCaseTagFilter((cur) =>
+                              active ? cur.filter((t) => t !== tag) : [...cur, tag]
+                            )
                           }
-                        }}
-                      />
-                      <div className="flex-1">
-                        <p className="truncate text-sm">{tc.title}</p>
-                        <p className="text-xs text-muted-foreground">{tc.displayId}</p>
-                      </div>
-                      <Badge variant={PRIORITY_VARIANT[tc.priority] ?? "outline"} className="text-[10px]">
-                        {tc.priority}
-                      </Badge>
-                    </label>
-                  );
-                })}
-                {filteredManageCases.length === 0 && (
-                  <p className="px-2 py-3 text-sm text-muted-foreground">No matches.</p>
+                          className={cn(
+                            "rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
+                            active
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground hover:bg-muted/80"
+                          )}
+                        >
+                          #{tag}
+                        </button>
+                      );
+                    })}
+                    {(manageCaseSearch || manageCaseTagFilter.length > 0) && (
+                      <button
+                        type="button"
+                        onClick={() => { setManageCaseSearch(""); setManageCaseTagFilter([]); }}
+                        className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                      >
+                        Clear filters
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
+              <div className="rounded-lg border border-border">
+                <div className="space-y-0.5 p-2">
+                  {filteredManageCases.map((tc) => {
+                    const selected = manageSelectedCases.includes(tc.id);
+                    return (
+                      <label
+                        key={tc.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted"
+                      >
+                        <input
+                          type="checkbox"
+                          className="accent-primary"
+                          checked={selected}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setManageSelectedCases((cur) => [...cur, tc.id]);
+                            } else {
+                              setManageSelectedCases((cur) => cur.filter((id) => id !== tc.id));
+                            }
+                          }}
+                        />
+                        <div className="flex-1">
+                          <p className="truncate text-sm">{tc.title}</p>
+                          <p className="text-xs text-muted-foreground">{tc.displayId}</p>
+                        </div>
+                        <Badge variant={PRIORITY_VARIANT[tc.priority] ?? "outline"} className="text-[10px]">
+                          {tc.priority}
+                        </Badge>
+                      </label>
+                    );
+                  })}
+                  {filteredManageCases.length === 0 && (
+                    <p className="px-2 py-3 text-sm text-muted-foreground">No matches.</p>
+                  )}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {manageSelectedCases.length} case{manageSelectedCases.length !== 1 ? "s" : ""} selected
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {manageSelectedCases.length} case{manageSelectedCases.length !== 1 ? "s" : ""} selected
-            </p>
-            <div className="flex justify-end gap-3 pt-2">
-              <Button type="button" variant="outline" onClick={() => setManageSuiteTarget(null)}>
+            <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-border px-6 py-4 sm:flex-row sm:justify-end">
+              <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setManageSuiteTarget(null)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={updatingSuiteCases}>
+              <Button type="submit" className="w-full sm:w-auto" disabled={updatingSuiteCases}>
                 {updatingSuiteCases ? "Saving…" : "Save changes"}
               </Button>
             </div>
@@ -1311,6 +1725,102 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
               )}
             </div>
 
+            {/* ── Tag + imported-only filter chips ── */}
+            {(distinctTags.length > 0 || testCases.some((tc) => tc.importBatchId)) && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {distinctTags.map((tag) => {
+                  const active = caseTagFilter.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() =>
+                        setCaseTagFilter((cur) =>
+                          active ? cur.filter((t) => t !== tag) : [...cur, tag]
+                        )
+                      }
+                      className={cn(
+                        "rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
+                        active
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      )}
+                    >
+                      #{tag}
+                    </button>
+                  );
+                })}
+                {testCases.some((tc) => tc.importBatchId) && (
+                  <button
+                    type="button"
+                    onClick={() => setShowImportedOnly((v) => !v)}
+                    className={cn(
+                      "rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
+                      showImportedOnly
+                        ? "bg-amber-500 text-white"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    )}
+                  >
+                    📥 Imported only
+                  </button>
+                )}
+                {(caseSearch || caseTagFilter.length > 0 || showImportedOnly) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCaseSearch("");
+                      setCaseTagFilter([]);
+                      setShowImportedOnly(false);
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* ── Import batch banners ── */}
+            {importBatches.length > 0 && (
+              <div className="space-y-2">
+                {importBatches.map((batch) => (
+                  <div
+                    key={batch.id}
+                    className="flex items-center gap-3 rounded-lg border border-amber-200 border-l-4 border-l-amber-400 bg-amber-50/60 dark:border-amber-800 dark:border-l-amber-500 dark:bg-amber-900/20 px-4 py-2.5"
+                  >
+                    <div className="flex-1 min-w-0 text-sm text-amber-800 dark:text-amber-200">
+                      <span className="font-medium">{batch.caseCount}</span> case{batch.caseCount !== 1 ? "s" : ""} imported from{" "}
+                      <span className="font-semibold">{batch.filename}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => undoBatch(batch.id)}
+                      className="shrink-0 text-xs font-medium text-amber-700 dark:text-amber-300 underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100"
+                    >
+                      Undo all
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => selectBatchCases(batch.id)}
+                      className="shrink-0 text-xs font-medium text-amber-700 dark:text-amber-300 underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100"
+                    >
+                      Select imported
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => dismissBatch(batch.id)}
+                      className="shrink-0 rounded p-0.5 text-amber-500 hover:text-amber-700 dark:hover:text-amber-300 transition-colors"
+                      title="Dismiss"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {filteredCases.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border bg-muted/30 p-10 text-center">
                 {testCases.length === 0 ? (
@@ -1359,7 +1869,14 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
                   </thead>
                   <tbody className="divide-y divide-border bg-card">
                     {filteredCases.map((tc) => (
-                      <tr key={tc.id} className={`hover:bg-muted/30 transition-colors${selectedIds.has(tc.id) ? " bg-muted/20" : ""}`}>
+                      <tr
+                        key={tc.id}
+                        className={cn(
+                          "hover:bg-muted/30 transition-colors",
+                          selectedIds.has(tc.id) && "bg-muted/20",
+                          tc.importBatchId && "[box-shadow:inset_4px_0_0_#f59e0b]"
+                        )}
+                      >
                         <td className="w-10 px-3 py-3">
                           <input
                             type="checkbox"
@@ -1376,7 +1893,14 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
                         </td>
                         <td className="px-4 py-3 font-semibold tabular-nums">{tc.displayId}</td>
                         <td className="px-4 py-3">
-                          <div className="font-medium">{tc.title}</div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{tc.title}</span>
+                            {tc.importBatchId && (
+                              <span className="inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                                Imported
+                              </span>
+                            )}
+                          </div>
                           {tc.description && (
                             <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{tc.description}</p>
                           )}
@@ -1631,6 +2155,45 @@ export function TestsPanel({ projectId, testCasePrefix, testCases, activeManualR
                   value={runCaseSearch}
                   onChange={(e) => setRunCaseSearch(e.target.value)}
                 />
+              )}
+
+              {distinctTags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {distinctTags.map((tag) => {
+                    const active = runCaseTagFilter.includes(tag);
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() =>
+                          setRunCaseTagFilter((cur) =>
+                            active ? cur.filter((t) => t !== tag) : [...cur, tag]
+                          )
+                        }
+                        className={cn(
+                          "rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
+                          active
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground hover:bg-muted/80"
+                        )}
+                      >
+                        #{tag}
+                      </button>
+                    );
+                  })}
+                  {(runCaseSearch || runCaseTagFilter.length > 0) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRunCaseSearch("");
+                        setRunCaseTagFilter([]);
+                      }}
+                      className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                    >
+                      Clear filters
+                    </button>
+                  )}
+                </div>
               )}
 
               <div className="relative max-h-56 overflow-auto rounded-lg border border-border">

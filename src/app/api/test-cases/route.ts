@@ -4,16 +4,21 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { ensureProjectForUser, userHasProjectAccess } from "@/lib/projects";
 import { reserveTestCaseDisplayIds } from "@/lib/test-case-ids";
+import { autoCorrectJiraKey } from "@/lib/jira";
 
 // ─── Validation Schemas ───────────────────────────────────────────────────────
 
 const jiraKeySchema = z
   .string()
   .trim()
-  .min(1)
   .max(32)
-  .regex(/^[A-Z][A-Z0-9]*-[0-9]+$/, { message: "Invalid Jira issue key." })
-  .transform((value) => value.toUpperCase());
+  .optional()
+  .nullable()
+  .transform((val) => {
+    if (!val) return null;
+    const { corrected } = autoCorrectJiraKey(val);
+    return corrected; // null if uncorrectable
+  });
 
 const createTestCaseSchema = z.object({
   projectId: z.string().min(1).optional(),
@@ -25,7 +30,7 @@ const createTestCaseSchema = z.object({
   moduleName: z.string().trim().min(1).max(120).optional(),
   priority: z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW"]).default("MEDIUM"),
   status: z.enum(["DRAFT", "ACTIVE", "DEPRECATED"]).default("DRAFT"),
-  jiraKey: jiraKeySchema.optional().nullable(),
+  jiraKey: jiraKeySchema,
 });
 
 // ─── GET /api/test-cases ──────────────────────────────────────────────────────

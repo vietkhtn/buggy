@@ -1,5 +1,3 @@
-export const runtime = "nodejs";
-
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
@@ -21,7 +19,7 @@ function isStaticOrPublic(pathname: string): boolean {
   return false;
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Always allow static assets and auth routes
@@ -29,8 +27,12 @@ export async function middleware(request: NextRequest) {
 
   // Check setup completion (set-once cache)
   if (!setupComplete) {
-    const adminCount = await db.user.count({ where: { isWorkspaceAdmin: true } });
-    if (adminCount > 0) setupComplete = true;
+    try {
+      const adminCount = await db.user.count({ where: { isWorkspaceAdmin: true } });
+      if (adminCount > 0) setupComplete = true;
+    } catch {
+      // DB unavailable — treat as not set up, allow through to /setup
+    }
   }
 
   // Setup gate: if no workspace admin exists, redirect everything to /setup

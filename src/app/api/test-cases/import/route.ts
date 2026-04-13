@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { ensureProjectForUser, userHasProjectAccess } from "@/lib/projects";
 import { reserveTestCaseDisplayIds } from "@/lib/test-case-ids";
+import { autoCorrectJiraKey } from "@/lib/jira";
 import ExcelJS from "exceljs";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
@@ -28,7 +29,7 @@ function cellValue(cell: ExcelJS.Cell): string {
   return String(v);
 }
 
-async function parseWorkbook(data: ArrayBuffer, filename: string): Promise<Record<string, unknown>[]> {
+export async function parseWorkbook(data: ArrayBuffer, filename: string): Promise<Record<string, unknown>[]> {
   const ext = filename.split(".").pop()?.toLowerCase();
   const workbook = new ExcelJS.Workbook();
 
@@ -165,12 +166,10 @@ export async function POST(request: Request) {
     return mod.id;
   }
 
-  function normalizeJiraKey(raw: string | undefined) {
-    if (!raw) return null;
-    const upper = raw.toUpperCase();
-    if (!upper) return null;
-    return /^[A-Z][A-Z0-9]*-[0-9]+$/.test(upper) ? upper : null;
-  }
+  // Create the import batch record
+  const batch = await db.importBatch.create({
+    data: { projectId, filename: file.name },
+  });
 
   const created: string[] = [];
   const errors: { row: number; error: string }[] = [];
@@ -184,7 +183,8 @@ export async function POST(request: Request) {
           .split(",")
           .map((t) => t.trim())
           .filter(Boolean);
-        const jiraKey = normalizeJiraKey(row.jira ?? row.jirakey ?? row.reference);
+        const rawJira = row.jira ?? row.jirakey ?? row.reference;
+        const jiraKey = rawJira ? (autoCorrectJiraKey(rawJira).corrected ?? null) : null;
 
         const [displayId] = await reserveTestCaseDisplayIds(tx, projectId, 1);
 
@@ -192,6 +192,7 @@ export async function POST(request: Request) {
           data: {
             projectId: projectId,
             moduleId,
+            importBatchId: batch.id,
             displayId,
             jiraKey,
             title: row.title,
@@ -211,5 +212,13 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ created: created.length, errors }, { status: 201 });
+  // If no cases were created, clean up the empty batch
+  if (created.length === 0) {
+    await db.importBatch.delete({ where: { id: batch.id } }).catch(() => null);
+  }
+
+  return NextResponse.json(
+    { created: created.length, errors, batchId: batch.id, filename: file.name },
+    { status: 201 }
+  );
 }

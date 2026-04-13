@@ -3,14 +3,19 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { userHasProjectAccess } from "@/lib/projects";
+import { autoCorrectJiraKey } from "@/lib/jira";
 
 const jiraKeySchema = z
   .string()
   .trim()
-  .min(1)
   .max(32)
-  .regex(/^[A-Z][A-Z0-9]*-[0-9]+$/)
-  .transform((value) => value.toUpperCase());
+  .optional()
+  .nullable()
+  .transform((val) => {
+    if (!val) return null;
+    const { corrected } = autoCorrectJiraKey(val);
+    return corrected;
+  });
 
 const updateTestCaseSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
@@ -21,7 +26,7 @@ const updateTestCaseSchema = z.object({
   moduleName: z.string().trim().min(1).max(120).optional().nullable(),
   priority: z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW"]).optional(),
   status: z.enum(["DRAFT", "ACTIVE", "DEPRECATED"]).optional(),
-  jiraKey: jiraKeySchema.optional().nullable(),
+  jiraKey: jiraKeySchema,
 });
 
 async function getTestCaseWithAccess(userId: string, testCaseId: string) {
