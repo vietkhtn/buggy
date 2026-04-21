@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.5.4.0] - 2026-04-21
+
+### Fixed
+- Suite creation cross-project validation — test suites can no longer be created in the wrong project.
+- Duplicate suite name error — creating a suite with an already-used name now returns a clear error.
+
+### Changed
+- Dialog UX improvements — flex layouts and responsive buttons for better usability.
+
+---
+
 ## [0.5.3.0] - 2026-04-10
 
 ### Added
